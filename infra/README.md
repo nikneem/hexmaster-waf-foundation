@@ -42,6 +42,76 @@ az deployment sub create `
   --parameters .\infra\landing-zone\main.bicepparam
 ```
 
+## GitHub Actions workflow
+
+The repository workflow `.github/workflows/deploy-landing-zone.yml` provides a staged deployment path:
+
+1. **Validate** the Bicep source and parameter file
+2. **Preview** infrastructure changes with subscription-scope what-if
+3. **Deploy** the landing zone through GitHub OIDC-authenticated Azure access
+4. **Verify** the deployment state and preserve operator-facing evidence
+
+### Required repository configuration
+
+Configure these repository or environment variables for the workflow:
+
+- `AZURE_CLIENT_ID` - application or user-assigned managed identity client ID for the GitHub federated credential
+- `AZURE_TENANT_ID` - Microsoft Entra tenant ID
+- `AZURE_SUBSCRIPTION_ID` - target Azure subscription ID
+- `AZURE_PRIMARY_LOCATION` - default deployment location for the subscription-scope deployment record, for example `westeurope`
+
+Recommended GitHub environments:
+
+- `landing-zone-dev`
+- `landing-zone-test`
+- `landing-zone-prod`
+
+Use environment protection rules on the environments that should gate deployment.
+
+### Azure setup requirements
+
+The GitHub workflow uses **OIDC**, not a stored client secret, for the normal deployment path. The Azure deployment identity should:
+
+- trust this repository through a GitHub federated credential
+- have least-privilege rights to deploy the landing-zone subscription-scope Bicep entrypoint
+- keep deployment access separate from runtime identities and operator break-glass access
+
+At minimum, document and review whether the workflow requires:
+
+- subscription-scope deployment rights
+- resource group creation rights
+- any role-assignment rights for the initial bootstrap path
+
+### Usage
+
+- **Pull requests** run validation and preview only
+- **Pushes to `main`** run validation, preview, deployment, and verification
+- **Manual dispatch** can run preview only or preview plus deployment by setting `execute_deploy`
+
+Keep the `primary_location` workflow input aligned with the `primaryLocation` value inside the selected `.bicepparam` file.
+
+### Failure triage
+
+If a workflow run fails:
+
+1. Review the `GITHUB_STEP_SUMMARY` sections for the failed stage
+2. Download the uploaded validation, what-if, deployment, or verification artifacts
+3. Re-run the equivalent Azure commands locally if needed:
+
+```powershell
+az deployment sub what-if `
+  --name landing-zone-preview `
+  --location westeurope `
+  --template-file .\infra\landing-zone\main.bicep `
+  --parameters .\infra\landing-zone\main.bicepparam
+
+az deployment sub show `
+  --name <deployment-name> `
+  --query properties.error
+```
+
+4. If the deployment succeeded but verification indicates a problem, inspect the deployment outputs and the operational artifacts under `infra\operations\`
+
 ## Cost guardrails encoded in the baseline
 
 - **Network** defaults to hub-and-spoke peering with **Point-to-Site VPN** and no Azure Firewall, Virtual WAN, NAT Gateway, or Bastion by default

@@ -1,0 +1,284 @@
+name: Deploy landing zone
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'infra/**'
+      - '.github/workflows/deploy-landing-zone.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'infra/**'
+      - '.github/workflows/deploy-landing-zone.yml'
+  workflow_dispatch:
+    inputs:
+      deployment_environment:
+        description: Deployment environment suffix and GitHub environment target.
+        required: true
+        default: dev
+        type: choice
+        options:
+          - dev
+          - test
+          - prod
+      parameter_file:
+        description: Bicep parameter file to use for the landing-zone deployment.
+        required: true
+        default: infra/landing-zone/main.bicepparam
+        type: string
+      primary_location:
+        description: Azure location used for the subscription-scope deployment record.
+        required: true
+        default: westeurope
+        type: string
+      execute_deploy:
+        description: Set to true to run the deployment stage from a manual dispatch.
+        required: true
+        default: false
+        type: boolean
+
+concurrency:
+  group: landing-zone-${{ github.event.inputs.deployment_environment || 'dev' }}-${{ github.ref_name }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  BICEP_TEMPLATE: infra/landing-zone/main.bicep
+  BICEP_PARAMETER_FILE: ${{ github.event.inputs.parameter_file || 'infra/landing-zone/main.bicepparam' }}
+  DEPLOYMENT_ENVIRONMENT: ${{ github.event.inputs.deployment_environment || 'dev' }}
+  AZURE_LOCATION: ${{ github.event.inputs.primary_location || vars.AZURE_PRIMARY_LOCATION || 'westeurope' }}
+  DEPLOYMENT_NAME: landing-zone-${{ github.run_id }}-${{ github.run_attempt }}
+
+jobs:
+  validate:
+    name: Validate Bicep
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Validate Bicep source and parameter file
+        shell: bash
+        run: |
+          set -euo pipefail
+          az bicep version
+          az bicep build \
+            --file "$BICEP_TEMPLATE" \
+            --outfile infra/landing-zone/main.json
+          az bicep build-params \
+            --file "$BICEP_PARAMETER_FILE" \
+            --outfile infra/landing-zone/main.parameters.json
+
+      - name: Publish validation artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: bicep-validation-${{ github.run_id }}
+          path: |
+            infra/landing-zone/main.json
+            infra/landing-zone/main.parameters.json
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Write validation summary
+        shell: bash
+        run: |
+          {
+            echo '## Validation'
+            echo
+            echo "- Template: \`$BICEP_TEMPLATE\`"
+            echo "- Parameter file: \`$BICEP_PARAMETER_FILE\`"
+            echo "- Azure location: \`$AZURE_LOCATION\`"
+            echo '- Result: Bicep build and parameter build succeeded'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  preview:
+    name: Preview changes
+    runs-on: ubuntu-latest
+    needs: validate
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Azure login with OIDC
+        uses: azure/login@532459ea530d8321f2fb9bb10d1e0bcf23869a43 # v3.0.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Run what-if preview
+        shell: bash
+        run: |
+          set -euo pipefail
+          az deployment sub what-if \
+            --name "$DEPLOYMENT_NAME-preview" \
+            --location "$AZURE_LOCATION" \
+            --template-file "$BICEP_TEMPLATE" \
+            --parameters @"$BICEP_PARAMETER_FILE" \
+            --result-format FullResourcePayloads \
+            --output json > what-if.json
+
+      - name: Publish preview artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: landing-zone-what-if-${{ github.run_id }}
+          path: what-if.json
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Write preview summary
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          data = json.loads(Path("what-if.json").read_text())
+          changes = data.get("changes") or data.get("properties", {}).get("changes") or []
+          deployment_name = os.environ["DEPLOYMENT_NAME"] + "-preview"
+          artifact_name = f"landing-zone-what-if-{os.environ['GITHUB_RUN_ID']}"
+          lines = [
+              "## Preview",
+              "",
+              f"- Deployment name: `{deployment_name}`",
+              f"- Change count: `{len(changes)}`",
+              f"- Artifact: `{artifact_name}`",
+              "",
+              "Preview output has been uploaded as a workflow artifact."
+          ]
+          Path("preview-summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+          PY
+          cat preview-summary.md >> "$GITHUB_STEP_SUMMARY"
+
+  deploy:
+    name: Deploy landing zone
+    runs-on: ubuntu-latest
+    needs: preview
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.execute_deploy == 'true')
+    permissions:
+      contents: read
+      id-token: write
+    environment:
+      name: landing-zone-${{ env.DEPLOYMENT_ENVIRONMENT }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Azure login with OIDC
+        uses: azure/login@532459ea530d8321f2fb9bb10d1e0bcf23869a43 # v3.0.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy subscription-scope landing zone
+        shell: bash
+        run: |
+          set -euo pipefail
+          az deployment sub create \
+            --name "$DEPLOYMENT_NAME" \
+            --location "$AZURE_LOCATION" \
+            --template-file "$BICEP_TEMPLATE" \
+            --parameters @"$BICEP_PARAMETER_FILE" \
+            --output json > deployment.json
+
+      - name: Publish deployment artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: landing-zone-deployment-${{ github.run_id }}
+          path: deployment.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Write deployment summary
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          data = json.loads(Path("deployment.json").read_text())
+          properties = data.get("properties", {})
+          outputs = properties.get("outputs", {})
+          lines = [
+              "## Deployment",
+              "",
+              f"- Deployment name: `{data.get('name', 'unknown')}`",
+              f"- Provisioning state: `{properties.get('provisioningState', 'unknown')}`",
+              f"- Output keys: `{', '.join(outputs.keys()) if outputs else 'none'}`",
+              "",
+              "Deployment output has been uploaded as a workflow artifact."
+          ]
+          Path("deployment-summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+          PY
+          cat deployment-summary.md >> "$GITHUB_STEP_SUMMARY"
+
+  verify:
+    name: Verify deployment
+    runs-on: ubuntu-latest
+    needs: deploy
+    if: needs.deploy.result == 'success'
+    permissions:
+      contents: read
+      id-token: write
+    environment:
+      name: landing-zone-${{ env.DEPLOYMENT_ENVIRONMENT }}
+
+    steps:
+      - name: Azure login with OIDC
+        uses: azure/login@532459ea530d8321f2fb9bb10d1e0bcf23869a43 # v3.0.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Verify deployment state and outputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          az deployment sub show \
+            --name "$DEPLOYMENT_NAME" \
+            --query "{name:name, provisioningState:properties.provisioningState, outputs:properties.outputs}" \
+            --output json > verification.json
+
+      - name: Publish verification artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: landing-zone-verification-${{ github.run_id }}
+          path: verification.json
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Write verification summary
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          data = json.loads(Path("verification.json").read_text())
+          lines = [
+              "## Verification",
+              "",
+              f"- Deployment name: `{data.get('name', 'unknown')}`",
+              f"- Provisioning state: `{data.get('provisioningState', 'unknown')}`",
+              "- Diagnostic follow-up:",
+              "  - `az deployment sub show --name <deployment-name> --query properties.outputs`",
+              "  - `az deployment sub show --name <deployment-name> --query properties.error`",
+              "  - Review the uploaded what-if, deployment, and verification artifacts from this run."
+          ]
+          Path("verification-summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+          PY
+          cat verification-summary.md >> "$GITHUB_STEP_SUMMARY"
