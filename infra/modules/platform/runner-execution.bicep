@@ -50,11 +50,6 @@ param runnerExecutionConfig object = {
   githubPatSecretName: 'github-actions-pat'
   githubPatSecretUri: ''
   registrationTokenApiUrl: ''
-  environmentNetwork: {
-    dockerBridgeCidr: '10.255.0.0/16'
-    platformReservedCidr: '10.254.0.0/16'
-    platformReservedDnsIP: '10.254.0.10'
-  }
 }
 
 var acrPullRoleDefinitionId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')
@@ -90,9 +85,6 @@ resource containerAppsEnvironment 'Microsoft.App/managedEnvironments@2025-01-01'
     vnetConfiguration: {
       infrastructureSubnetId: infrastructureSubnetId
       internal: true
-      dockerBridgeCidr: runnerExecutionConfig.environmentNetwork.dockerBridgeCidr
-      platformReservedCidr: runnerExecutionConfig.environmentNetwork.platformReservedCidr
-      platformReservedDnsIP: runnerExecutionConfig.environmentNetwork.platformReservedDnsIP
     }
   }
 }
