@@ -39,6 +39,11 @@ resource gatewayPublicIp 'Microsoft.Network/publicIPAddresses@2024-05-01' = {
   name: gatewayPublicIpName
   location: location
   tags: tags
+  zones: [
+    '1'
+    '2'
+    '3'
+  ]
   sku: {
     name: 'Standard'
     tier: 'Regional'

@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.39.26.7824",
-      "templateHash": "10765494589659066924"
+      "templateHash": "17610746500988350797"
     }
   },
   "parameters": {
@@ -1486,7 +1486,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.39.26.7824",
-              "templateHash": "10408638928838204315"
+              "templateHash": "10520420255655320083"
             }
           },
           "parameters": {
@@ -1565,6 +1565,11 @@
               "name": "[parameters('gatewayPublicIpName')]",
               "location": "[parameters('location')]",
               "tags": "[parameters('tags')]",
+              "zones": [
+                "1",
+                "2",
+                "3"
+              ],
               "sku": {
                 "name": "Standard",
                 "tier": "Regional"
