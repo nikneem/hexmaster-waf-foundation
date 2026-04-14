@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.39.26.7824",
-      "templateHash": "14094913809001587613"
+      "templateHash": "6353983050141346107"
     }
   },
   "parameters": {
@@ -2442,7 +2442,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.39.26.7824",
-              "templateHash": "13187557637643409229"
+              "templateHash": "13028050792713282771"
             }
           },
           "parameters": {
@@ -2563,9 +2563,6 @@
               "location": "[parameters('location')]",
               "tags": "[parameters('tags')]",
               "properties": {
-                "appLogsConfiguration": {
-                  "destination": "none"
-                },
                 "vnetConfiguration": {
                   "infrastructureSubnetId": "[parameters('infrastructureSubnetId')]",
                   "internal": true,

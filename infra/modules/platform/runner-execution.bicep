@@ -87,9 +87,6 @@ resource containerAppsEnvironment 'Microsoft.App/managedEnvironments@2025-01-01'
   location: location
   tags: tags
   properties: {
-    appLogsConfiguration: {
-      destination: 'none'
-    }
     vnetConfiguration: {
       infrastructureSubnetId: infrastructureSubnetId
       internal: true
