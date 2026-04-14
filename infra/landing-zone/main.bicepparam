@@ -35,7 +35,7 @@ param hubNetworkConfig = {
 }
 
 param operatorConnectivityConfig = {
-  vpnGatewaySku: 'VpnGw1'
+  vpnGatewaySku: 'VpnGw1AZ'
   vpnClientAddressPool: '172.20.250.0/24'
   entraTenantId: '11111111-1111-1111-1111-111111111111'
   entraAudience: 'c632b3df-fb67-4d84-bdcf-b95ad541b5c8'

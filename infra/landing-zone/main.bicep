@@ -52,7 +52,7 @@ param hubNetworkConfig object = {
 
 @description('Operator connectivity configuration for the Point-to-Site VPN path.')
 param operatorConnectivityConfig object = {
-  vpnGatewaySku: 'VpnGw1'
+  vpnGatewaySku: 'VpnGw1AZ'
   vpnClientAddressPool: '172.20.250.0/24'
   entraTenantId: '00000000-0000-0000-0000-000000000000'
   entraAudience: 'c632b3df-fb67-4d84-bdcf-b95ad541b5c8'

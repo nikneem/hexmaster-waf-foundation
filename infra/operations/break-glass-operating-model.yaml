@@ -4,7 +4,7 @@ scope: lz-hub-connectivity
 hub_role: platform-network
 connectivity:
   primary_path: point-to-site-vpn
-  gateway_sku: VpnGw1
+  gateway_sku: VpnGw1AZ
   tunnel_protocols:
     - OpenVPN
   vpn_client: Azure VPN Client

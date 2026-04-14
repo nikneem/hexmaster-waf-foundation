@@ -15,8 +15,8 @@ param virtualNetworkGatewayName string
 @description('Gateway subnet resource ID from the hub VNet.')
 param gatewaySubnetId string
 
-@description('Low-cost VPN gateway SKU for Point-to-Site access.')
-param vpnGatewaySku string = 'VpnGw1'
+@description('Availability-zone-capable VPN gateway SKU for Point-to-Site access.')
+param vpnGatewaySku string = 'VpnGw1AZ'
 
 @description('Address pool assigned to Point-to-Site VPN clients.')
 param vpnClientAddressPool string

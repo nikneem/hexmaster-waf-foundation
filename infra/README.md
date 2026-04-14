@@ -109,7 +109,7 @@ az deployment sub show `
 ## Connectivity notes
 
 - The hub stays a **platform** network; workloads belong in separate spokes
-- Operator access uses **Point-to-Site VPN** on **VpnGw1** rather than Bastion
+- Operator access uses **Point-to-Site VPN** on **VpnGw1AZ** rather than Bastion
 - Private DNS is centralized in the hub using Azure-provided DNS initially, with hub-linked private zones for future services
 - Break-glass reachability to spokes depends on hub-spoke peering with **allowGatewayTransit** and **useRemoteGateways**
 - The central ACR and shared Key Vault are deployed into the platform resource group and exposed over private endpoints in the hub
