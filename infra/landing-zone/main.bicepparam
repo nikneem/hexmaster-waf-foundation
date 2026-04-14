@@ -93,11 +93,6 @@ param runnerExecutionConfig = {
   githubPatSecretName: 'github-actions-pat'
   githubPatSecretUri: ''
   registrationTokenApiUrl: ''
-  environmentNetwork: {
-    dockerBridgeCidr: '10.255.0.0/16'
-    platformReservedCidr: '10.254.0.0/16'
-    platformReservedDnsIP: '10.254.0.10'
-  }
 }
 
 param workloadSpokes = []
