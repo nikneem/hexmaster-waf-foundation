@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.39.26.7824",
-      "templateHash": "15362916389662649161"
+      "templateHash": "172476697189136595"
     }
   },
   "parameters": {
@@ -86,7 +86,7 @@
     "operatorConnectivityConfig": {
       "type": "object",
       "defaultValue": {
-        "vpnGatewaySku": "VpnGw1",
+        "vpnGatewaySku": "VpnGw1AZ",
         "vpnClientAddressPool": "172.20.250.0/24",
         "entraTenantId": "00000000-0000-0000-0000-000000000000",
         "entraAudience": "c632b3df-fb67-4d84-bdcf-b95ad541b5c8",
@@ -1491,7 +1491,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.39.26.7824",
-              "templateHash": "11851793154914668291"
+              "templateHash": "10408638928838204315"
             }
           },
           "parameters": {
@@ -1528,9 +1528,9 @@
             },
             "vpnGatewaySku": {
               "type": "string",
-              "defaultValue": "VpnGw1",
+              "defaultValue": "VpnGw1AZ",
               "metadata": {
-                "description": "Low-cost VPN gateway SKU for Point-to-Site access."
+                "description": "Availability-zone-capable VPN gateway SKU for Point-to-Site access."
               }
             },
             "vpnClientAddressPool": {
