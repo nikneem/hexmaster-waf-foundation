@@ -9,12 +9,6 @@ param tags = {
   'alz:managedBy': 'github-actions'
   'alz:sourceRepo': 'hexmaster-waf-foundation'
 }
-param diagnosticsWorkspaceResourceId = ''
-param budgetAmount = 150
-param budgetStartDate = '2025-01-01T00:00:00Z'
-param budgetContactEmails = [
-  'platform-ops@example.com'
-]
 
 param hubNetworkConfig = {
   addressPrefixes: [

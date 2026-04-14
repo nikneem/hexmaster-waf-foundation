@@ -4,10 +4,8 @@ This repository now uses a **Bicep-first** layout for the Azure landing zone fou
 
 ## Structure
 
-- `landing-zone\main.bicep` - subscription-scope entry point for the governance baseline
+- `landing-zone\main.bicep` - subscription-scope entry point for the landing zone foundation
 - `landing-zone\main.bicepparam` - low-cost example parameters for a first deployment
-- `modules\governance\baseline.bicep` - naming, tagging, diagnostics, and cost baseline outputs
-- `modules\governance\budget.bicep` - subscription budget resource
 - `modules\connectivity\hub-network.bicep` - hub VNet, subnetting, NSGs, route tables, and DNS baseline outputs
 - `modules\connectivity\operator-connectivity.bicep` - Point-to-Site VPN gateway and operator access outputs
 - `modules\platform\shared-services.bicep` - hub-hosted shared services including the central ACR, Key Vault, private endpoints, and private DNS
@@ -20,8 +18,6 @@ This repository now uses a **Bicep-first** layout for the Azure landing zone fou
 
 This scaffold implements OpenSpec tasks:
 
-- **1.1** subscription baseline, naming conventions, required tags, diagnostics defaults, and budget creation
-- **1.2** allowed service tiers and default cost-control posture for networking, registry, and runner hosting
 - **2.1** hub VNet address planning and dedicated subnets for VPN, shared services, private endpoints, and Container Apps infrastructure
 - **2.2** baseline NSG, route-table, and DNS patterns that keep the hub spoke-ready
 - **3.1** Point-to-Site VPN gateway, OpenVPN tunnel path, and Microsoft Entra ID authentication metadata
@@ -109,14 +105,6 @@ az deployment sub show `
 ```
 
 4. If the deployment succeeded but verification indicates a problem, inspect the deployment outputs and the operational artifacts under `infra\operations\`
-
-## Cost guardrails encoded in the baseline
-
-- **Network** defaults to hub-and-spoke peering with **Point-to-Site VPN** and no Azure Firewall, Virtual WAN, NAT Gateway, or Bastion by default
-- **Registry** defaults to **Premium SKU** Azure Container Registry because private endpoints are part of the baseline connectivity posture
-- **Runners** default to **Azure Container Apps Jobs on Consumption**
-- Higher-cost services require an explicit architecture review before adoption
-- Diagnostics default to Log Analytics only when a workspace is supplied, preventing accidental standing-cost services during bootstrap
 
 ## Connectivity notes
 

@@ -23,20 +23,6 @@
         "alz:sourceRepo": "hexmaster-waf-foundation"
       }
     },
-    "diagnosticsWorkspaceResourceId": {
-      "value": ""
-    },
-    "budgetAmount": {
-      "value": 150
-    },
-    "budgetStartDate": {
-      "value": "2025-01-01T00:00:00Z"
-    },
-    "budgetContactEmails": {
-      "value": [
-        "platform-ops@example.com"
-      ]
-    },
     "hubNetworkConfig": {
       "value": {
         "addressPrefixes": [

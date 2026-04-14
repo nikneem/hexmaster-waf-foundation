@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.39.26.7824",
-      "templateHash": "6353983050141346107"
+      "templateHash": "15362916389662649161"
     }
   },
   "parameters": {
@@ -20,7 +20,7 @@
       "minLength": 2,
       "maxLength": 12,
       "metadata": {
-        "description": "Short landing-zone identifier used in names, tags, and budget resources."
+        "description": "Short landing-zone identifier used in names and tags."
       }
     },
     "environment": {
@@ -51,34 +51,7 @@
       "type": "object",
       "defaultValue": {},
       "metadata": {
-        "description": "Additional tags merged into the shared governance baseline."
-      }
-    },
-    "diagnosticsWorkspaceResourceId": {
-      "type": "string",
-      "defaultValue": "",
-      "metadata": {
-        "description": "Existing Log Analytics workspace resource ID used for diagnostic settings defaults. Leave empty until observability resources exist."
-      }
-    },
-    "budgetAmount": {
-      "type": "int",
-      "defaultValue": 150,
-      "minValue": 1,
-      "metadata": {
-        "description": "Monthly subscription budget amount in the subscription billing currency."
-      }
-    },
-    "budgetStartDate": {
-      "type": "string",
-      "metadata": {
-        "description": "Budget period start date in ISO 8601 format, for example 2025-01-01T00:00:00Z."
-      }
-    },
-    "budgetContactEmails": {
-      "type": "array",
-      "metadata": {
-        "description": "Email recipients for budget threshold notifications."
+        "description": "Additional tags merged into the landing-zone resource tags."
       }
     },
     "hubNetworkConfig": {
@@ -242,11 +215,23 @@
       }
     ],
     "locationToken": "[toLower(replace(parameters('primaryLocation'), ' ', ''))]",
+    "landingZoneToken": "[toLower(replace(parameters('landingZoneName'), '-', ''))]",
     "prefix": "[format('{0}-{1}', parameters('landingZoneName'), parameters('environment'))]",
     "requiredTags": "[union(createObject('alz:landingZone', parameters('landingZoneName'), 'alz:environment', parameters('environment'), 'alz:owner', parameters('platformOwner'), 'alz:costCenter', parameters('platformCostCenter'), 'alz:lifecycle', 'shared-platform', 'alz:managedBy', 'bicep'), parameters('tags'))]",
     "connectivityResourceGroupName": "[format('rg-{0}-connectivity-{1}', variables('prefix'), variables('locationToken'))]",
     "platformResourceGroupName": "[format('rg-{0}-platform-{1}', variables('prefix'), variables('locationToken'))]",
-    "hubVnetName": "[format('vnet-{0}-hub-{1}', variables('prefix'), variables('locationToken'))]"
+    "hubVnetName": "[format('vnet-{0}-hub-{1}', variables('prefix'), variables('locationToken'))]",
+    "sharedServicesSubnetName": "[format('snet-{0}-shared-services', variables('prefix'))]",
+    "privateEndpointsSubnetName": "[format('snet-{0}-private-endpoints', variables('prefix'))]",
+    "runnerInfrastructureSubnetName": "[format('snet-{0}-runners', variables('prefix'))]",
+    "vpnGatewayPublicIpName": "[format('pip-{0}-vpn-{1}', variables('prefix'), variables('locationToken'))]",
+    "vpnGatewayName": "[format('vpngw-{0}-{1}', variables('prefix'), variables('locationToken'))]",
+    "containerAppsEnvironmentName": "[format('cae-{0}-{1}', variables('prefix'), variables('locationToken'))]",
+    "containerRegistryName": "[take(format('acr{0}{1}{2}', variables('landingZoneToken'), parameters('environment'), take(variables('locationToken'), 6)), 50)]",
+    "platformKeyVaultName": "[take(format('kv-{0}-{1}', variables('prefix'), variables('locationToken')), 24)]",
+    "runnerJobName": "[format('job-{0}-github', variables('prefix'))]",
+    "runnerExecutionIdentityName": "[format('id-{0}-runner-exec', variables('prefix'))]",
+    "runnerRegistryIdentityName": "[format('id-{0}-runner-reg', variables('prefix'))]"
   },
   "resources": [
     {
@@ -277,372 +262,6 @@
     {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
-      "name": "governance-baseline",
-      "location": "[deployment().location]",
-      "properties": {
-        "expressionEvaluationOptions": {
-          "scope": "inner"
-        },
-        "mode": "Incremental",
-        "parameters": {
-          "primaryLocation": {
-            "value": "[parameters('primaryLocation')]"
-          },
-          "landingZoneName": {
-            "value": "[parameters('landingZoneName')]"
-          },
-          "environment": {
-            "value": "[parameters('environment')]"
-          },
-          "platformOwner": {
-            "value": "[parameters('platformOwner')]"
-          },
-          "platformCostCenter": {
-            "value": "[parameters('platformCostCenter')]"
-          },
-          "tags": {
-            "value": "[parameters('tags')]"
-          },
-          "diagnosticsWorkspaceResourceId": {
-            "value": "[parameters('diagnosticsWorkspaceResourceId')]"
-          },
-          "budgetAmount": {
-            "value": "[parameters('budgetAmount')]"
-          },
-          "budgetStartDate": {
-            "value": "[parameters('budgetStartDate')]"
-          },
-          "budgetContactEmails": {
-            "value": "[parameters('budgetContactEmails')]"
-          }
-        },
-        "template": {
-          "$schema": "https://schema.management.azure.com/schemas/2018-05-01/subscriptionDeploymentTemplate.json#",
-          "contentVersion": "1.0.0.0",
-          "metadata": {
-            "_generator": {
-              "name": "bicep",
-              "version": "0.39.26.7824",
-              "templateHash": "881042038528159978"
-            }
-          },
-          "parameters": {
-            "primaryLocation": {
-              "type": "string",
-              "metadata": {
-                "description": "Azure region used for naming conventions and governance metadata."
-              }
-            },
-            "landingZoneName": {
-              "type": "string",
-              "metadata": {
-                "description": "Short landing-zone identifier used in names and tags."
-              }
-            },
-            "environment": {
-              "type": "string",
-              "metadata": {
-                "description": "Environment stamp for the landing zone."
-              }
-            },
-            "platformOwner": {
-              "type": "string",
-              "metadata": {
-                "description": "Owning team or platform contact."
-              }
-            },
-            "platformCostCenter": {
-              "type": "string",
-              "metadata": {
-                "description": "Cost center, cost code, or internal chargeback reference."
-              }
-            },
-            "tags": {
-              "type": "object",
-              "defaultValue": {},
-              "metadata": {
-                "description": "Additional tags merged into the shared governance baseline."
-              }
-            },
-            "diagnosticsWorkspaceResourceId": {
-              "type": "string",
-              "defaultValue": "",
-              "metadata": {
-                "description": "Existing Log Analytics workspace resource ID used for diagnostics defaults."
-              }
-            },
-            "budgetAmount": {
-              "type": "int",
-              "metadata": {
-                "description": "Monthly subscription budget amount."
-              }
-            },
-            "budgetStartDate": {
-              "type": "string",
-              "metadata": {
-                "description": "Budget period start date in ISO 8601 format."
-              }
-            },
-            "budgetContactEmails": {
-              "type": "array",
-              "metadata": {
-                "description": "Email recipients for budget threshold notifications."
-              }
-            }
-          },
-          "variables": {
-            "locationToken": "[toLower(replace(parameters('primaryLocation'), ' ', ''))]",
-            "landingZoneToken": "[toLower(replace(parameters('landingZoneName'), '-', ''))]",
-            "prefix": "[format('{0}-{1}', parameters('landingZoneName'), parameters('environment'))]",
-            "naming": {
-              "prefix": "[variables('prefix')]",
-              "resourceGroups": {
-                "management": "[format('rg-{0}-management-{1}', variables('prefix'), variables('locationToken'))]",
-                "connectivity": "[format('rg-{0}-connectivity-{1}', variables('prefix'), variables('locationToken'))]",
-                "platform": "[format('rg-{0}-platform-{1}', variables('prefix'), variables('locationToken'))]"
-              },
-              "resources": {
-                "logAnalyticsWorkspace": "[format('log-{0}-{1}', variables('prefix'), variables('locationToken'))]",
-                "hubVirtualNetwork": "[format('vnet-{0}-hub-{1}', variables('prefix'), variables('locationToken'))]",
-                "sharedServicesSubnet": "[format('snet-{0}-shared-services', variables('prefix'))]",
-                "privateEndpointsSubnet": "[format('snet-{0}-private-endpoints', variables('prefix'))]",
-                "runnerInfrastructureSubnet": "[format('snet-{0}-runners', variables('prefix'))]",
-                "vpnGatewayPublicIp": "[format('pip-{0}-vpn-{1}', variables('prefix'), variables('locationToken'))]",
-                "vpnGateway": "[format('vpngw-{0}-{1}', variables('prefix'), variables('locationToken'))]",
-                "containerAppsEnvironment": "[format('cae-{0}-{1}', variables('prefix'), variables('locationToken'))]",
-                "containerRegistry": "[take(format('acr{0}{1}{2}', variables('landingZoneToken'), parameters('environment'), take(variables('locationToken'), 6)), 50)]",
-                "platformKeyVault": "[take(format('kv-{0}-{1}', variables('prefix'), variables('locationToken')), 24)]",
-                "runnerJob": "[format('job-{0}-github', variables('prefix'))]",
-                "runnerExecutionIdentity": "[format('id-{0}-runner-exec', variables('prefix'))]",
-                "runnerRegistryIdentity": "[format('id-{0}-runner-reg', variables('prefix'))]"
-              }
-            },
-            "requiredTags": "[union(createObject('alz:landingZone', parameters('landingZoneName'), 'alz:environment', parameters('environment'), 'alz:owner', parameters('platformOwner'), 'alz:costCenter', parameters('platformCostCenter'), 'alz:lifecycle', 'shared-platform', 'alz:managedBy', 'bicep'), parameters('tags'))]",
-            "diagnosticsDefaults": {
-              "enabled": "[not(empty(parameters('diagnosticsWorkspaceResourceId')))]",
-              "workspaceResourceId": "[parameters('diagnosticsWorkspaceResourceId')]",
-              "destinationType": "Dedicated",
-              "logCategoryGroups": [
-                "allLogs",
-                "audit"
-              ],
-              "metricCategories": [
-                "AllMetrics"
-              ],
-              "retentionInDays": 30,
-              "notes": "Apply this baseline to supported platform resources when their modules are introduced."
-            },
-            "allowedServiceTiers": {
-              "networking": {
-                "topology": "HubAndSpoke",
-                "vpnGatewaySku": "VpnGw1",
-                "pointToSiteOnly": true,
-                "bastionDefault": "NotEnabled",
-                "azureFirewallDefault": "NotEnabled",
-                "natGatewayDefault": "NotEnabled",
-                "virtualWanDefault": "NotEnabled"
-              },
-              "registry": {
-                "service": "Azure Container Registry",
-                "sku": "Premium",
-                "adminUserEnabled": false,
-                "publicNetworkAccess": "Disabled",
-                "privateEndpointConnectivity": "Required",
-                "authenticationAsArm": "Enabled",
-                "premiumJustification": "Private Link requires Premium and is the accepted cost exception for the central shared registry."
-              },
-              "runnerPlatform": {
-                "service": "Azure Container Apps Jobs",
-                "environmentProfile": "Consumption",
-                "minExecutions": 0,
-                "dedicatedWorkloadProfiles": "NotAllowedByDefault",
-                "imageSource": "CentralACR",
-                "ingressExposure": "InternalOnly",
-                "secretSource": "SharedKeyVault"
-              }
-            },
-            "costGuardrails": {
-              "monthlyBudgetAmount": "[parameters('budgetAmount')]",
-              "exceptionApprovalRequiredFor": [
-                "Azure Bastion",
-                "Azure Firewall",
-                "Azure NAT Gateway",
-                "Azure Virtual WAN",
-                "Azure Container Apps dedicated workload profiles"
-              ],
-              "reviewNotes": [
-                "Keep shared platform services in the hub and onboard workload services to spokes later.",
-                "Prefer consumption-based or entry-level SKUs until production workload evidence justifies higher spend.",
-                "Use Azure Container Registry Premium for the single shared registry because Private Link is part of the baseline private connectivity posture.",
-                "Enable diagnostics only after routing to an existing workspace to avoid orphaned ingestion cost."
-              ]
-            }
-          },
-          "resources": [
-            {
-              "type": "Microsoft.Resources/deployments",
-              "apiVersion": "2025-04-01",
-              "name": "subscription-budget",
-              "location": "[deployment().location]",
-              "properties": {
-                "expressionEvaluationOptions": {
-                  "scope": "inner"
-                },
-                "mode": "Incremental",
-                "parameters": {
-                  "budgetName": {
-                    "value": "[format('budget-{0}', variables('prefix'))]"
-                  },
-                  "amount": {
-                    "value": "[parameters('budgetAmount')]"
-                  },
-                  "startDate": {
-                    "value": "[parameters('budgetStartDate')]"
-                  },
-                  "contactEmails": {
-                    "value": "[parameters('budgetContactEmails')]"
-                  }
-                },
-                "template": {
-                  "$schema": "https://schema.management.azure.com/schemas/2018-05-01/subscriptionDeploymentTemplate.json#",
-                  "contentVersion": "1.0.0.0",
-                  "metadata": {
-                    "_generator": {
-                      "name": "bicep",
-                      "version": "0.39.26.7824",
-                      "templateHash": "5182548748854623887"
-                    }
-                  },
-                  "parameters": {
-                    "budgetName": {
-                      "type": "string",
-                      "metadata": {
-                        "description": "Name of the subscription budget resource."
-                      }
-                    },
-                    "amount": {
-                      "type": "int",
-                      "minValue": 1,
-                      "metadata": {
-                        "description": "Monthly budget amount in the subscription billing currency."
-                      }
-                    },
-                    "startDate": {
-                      "type": "string",
-                      "metadata": {
-                        "description": "Budget period start date in ISO 8601 format."
-                      }
-                    },
-                    "contactEmails": {
-                      "type": "array",
-                      "metadata": {
-                        "description": "Email recipients for budget notifications."
-                      }
-                    }
-                  },
-                  "resources": [
-                    {
-                      "type": "Microsoft.Consumption/budgets",
-                      "apiVersion": "2024-08-01",
-                      "name": "[parameters('budgetName')]",
-                      "properties": {
-                        "amount": "[parameters('amount')]",
-                        "category": "Cost",
-                        "timeGrain": "Monthly",
-                        "timePeriod": {
-                          "startDate": "[parameters('startDate')]"
-                        },
-                        "notifications": {
-                          "advisoryActual": {
-                            "enabled": true,
-                            "operator": "GreaterThanOrEqualTo",
-                            "threshold": 50,
-                            "thresholdType": "Actual",
-                            "contactEmails": "[parameters('contactEmails')]",
-                            "contactGroups": [],
-                            "contactRoles": [],
-                            "locale": "en-us"
-                          },
-                          "warningActual": {
-                            "enabled": true,
-                            "operator": "GreaterThanOrEqualTo",
-                            "threshold": 80,
-                            "thresholdType": "Actual",
-                            "contactEmails": "[parameters('contactEmails')]",
-                            "contactGroups": [],
-                            "contactRoles": [],
-                            "locale": "en-us"
-                          },
-                          "forecastCritical": {
-                            "enabled": true,
-                            "operator": "GreaterThanOrEqualTo",
-                            "threshold": 100,
-                            "thresholdType": "Forecasted",
-                            "contactEmails": "[parameters('contactEmails')]",
-                            "contactGroups": [],
-                            "contactRoles": [],
-                            "locale": "en-us"
-                          }
-                        }
-                      }
-                    }
-                  ],
-                  "outputs": {
-                    "summary": {
-                      "type": "object",
-                      "value": {
-                        "name": "[parameters('budgetName')]",
-                        "amount": "[parameters('amount')]",
-                        "timeGrain": "Monthly",
-                        "notifications": {
-                          "actual50": 50,
-                          "actual80": 80,
-                          "forecast100": 100
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          ],
-          "outputs": {
-            "requiredTags": {
-              "type": "object",
-              "value": "[variables('requiredTags')]"
-            },
-            "diagnosticsDefaults": {
-              "type": "object",
-              "value": "[variables('diagnosticsDefaults')]"
-            },
-            "allowedServiceTiers": {
-              "type": "object",
-              "value": "[variables('allowedServiceTiers')]"
-            },
-            "baseline": {
-              "type": "object",
-              "value": {
-                "subscriptionScope": {
-                  "subscriptionId": "[subscription().subscriptionId]",
-                  "tenantId": "[subscription().tenantId]",
-                  "deploymentScope": "Subscription",
-                  "managementGroupAlignment": "Attach the subscription to the platform landing-zone management group before onboarding workloads."
-                },
-                "naming": "[variables('naming')]",
-                "tags": "[variables('requiredTags')]",
-                "diagnostics": "[variables('diagnosticsDefaults')]",
-                "allowedServiceTiers": "[variables('allowedServiceTiers')]",
-                "costGuardrails": "[variables('costGuardrails')]",
-                "budget": "[reference(subscriptionResourceId('Microsoft.Resources/deployments', 'subscription-budget'), '2025-04-01').outputs.summary.value]"
-              }
-            }
-          }
-        }
-      }
-    },
-    {
-      "type": "Microsoft.Resources/deployments",
-      "apiVersion": "2025-04-01",
       "name": "hub-network-foundation",
       "resourceGroup": "[variables('connectivityResourceGroupName')]",
       "properties": {
@@ -662,9 +281,9 @@
           },
           "subnetNames": {
             "value": {
-              "sharedServices": "[reference(subscriptionResourceId('Microsoft.Resources/deployments', 'governance-baseline'), '2025-04-01').outputs.baseline.value.naming.resources.sharedServicesSubnet]",
-              "privateEndpoints": "[reference(subscriptionResourceId('Microsoft.Resources/deployments', 'governance-baseline'), '2025-04-01').outputs.baseline.value.naming.resources.privateEndpointsSubnet]",
-              "containerAppsInfrastructure": "[reference(subscriptionResourceId('Microsoft.Resources/deployments', 'governance-baseline'), '2025-04-01').outputs.baseline.value.naming.resources.runnerInfrastructureSubnet]"
+              "sharedServices": "[variables('sharedServicesSubnetName')]",
+              "privateEndpoints": "[variables('privateEndpointsSubnetName')]",
+              "containerAppsInfrastructure": "[variables('runnerInfrastructureSubnetName')]"
             }
           },
           "hubNetworkConfig": {
@@ -1004,8 +623,7 @@
         }
       },
       "dependsOn": [
-        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('connectivityResourceGroupName'))]",
-        "[subscriptionResourceId('Microsoft.Resources/deployments', 'governance-baseline')]"
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('connectivityResourceGroupName'))]"
       ]
     },
     {
@@ -1842,10 +1460,10 @@
             "value": "[variables('requiredTags')]"
           },
           "gatewayPublicIpName": {
-            "value": "[reference(subscriptionResourceId('Microsoft.Resources/deployments', 'governance-baseline'), '2025-04-01').outputs.baseline.value.naming.resources.vpnGatewayPublicIp]"
+            "value": "[variables('vpnGatewayPublicIpName')]"
           },
           "virtualNetworkGatewayName": {
-            "value": "[reference(subscriptionResourceId('Microsoft.Resources/deployments', 'governance-baseline'), '2025-04-01').outputs.baseline.value.naming.resources.vpnGateway]"
+            "value": "[variables('vpnGatewayName')]"
           },
           "gatewaySubnetId": {
             "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('connectivityResourceGroupName')), 'Microsoft.Resources/deployments', 'hub-network-foundation'), '2025-04-01').outputs.foundation.value.subnetIds.gateway]"
@@ -2054,7 +1672,6 @@
       },
       "dependsOn": [
         "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('connectivityResourceGroupName'))]",
-        "[subscriptionResourceId('Microsoft.Resources/deployments', 'governance-baseline')]",
         "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('connectivityResourceGroupName')), 'Microsoft.Resources/deployments', 'hub-network-foundation')]"
       ]
     },
@@ -2082,10 +1699,10 @@
             "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('connectivityResourceGroupName')), 'Microsoft.Resources/deployments', 'hub-network-foundation'), '2025-04-01').outputs.foundation.value.subnetIds.privateEndpoints]"
           },
           "containerRegistryName": {
-            "value": "[reference(subscriptionResourceId('Microsoft.Resources/deployments', 'governance-baseline'), '2025-04-01').outputs.baseline.value.naming.resources.containerRegistry]"
+            "value": "[variables('containerRegistryName')]"
           },
           "keyVaultName": {
-            "value": "[reference(subscriptionResourceId('Microsoft.Resources/deployments', 'governance-baseline'), '2025-04-01').outputs.baseline.value.naming.resources.platformKeyVault]"
+            "value": "[variables('platformKeyVaultName')]"
           },
           "sharedServicesConfig": {
             "value": "[parameters('sharedServicesConfig')]"
@@ -2388,7 +2005,6 @@
         }
       },
       "dependsOn": [
-        "[subscriptionResourceId('Microsoft.Resources/deployments', 'governance-baseline')]",
         "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('connectivityResourceGroupName')), 'Microsoft.Resources/deployments', 'hub-network-foundation')]",
         "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('platformResourceGroupName'))]"
       ]
@@ -2411,22 +2027,22 @@
             "value": "[variables('requiredTags')]"
           },
           "containerAppsEnvironmentName": {
-            "value": "[reference(subscriptionResourceId('Microsoft.Resources/deployments', 'governance-baseline'), '2025-04-01').outputs.baseline.value.naming.resources.containerAppsEnvironment]"
+            "value": "[variables('containerAppsEnvironmentName')]"
           },
           "runnerJobName": {
-            "value": "[reference(subscriptionResourceId('Microsoft.Resources/deployments', 'governance-baseline'), '2025-04-01').outputs.baseline.value.naming.resources.runnerJob]"
+            "value": "[variables('runnerJobName')]"
           },
           "runnerExecutionIdentityName": {
-            "value": "[reference(subscriptionResourceId('Microsoft.Resources/deployments', 'governance-baseline'), '2025-04-01').outputs.baseline.value.naming.resources.runnerExecutionIdentity]"
+            "value": "[variables('runnerExecutionIdentityName')]"
           },
           "runnerRegistryIdentityName": {
-            "value": "[reference(subscriptionResourceId('Microsoft.Resources/deployments', 'governance-baseline'), '2025-04-01').outputs.baseline.value.naming.resources.runnerRegistryIdentity]"
+            "value": "[variables('runnerRegistryIdentityName')]"
           },
           "containerRegistryName": {
-            "value": "[reference(subscriptionResourceId('Microsoft.Resources/deployments', 'governance-baseline'), '2025-04-01').outputs.baseline.value.naming.resources.containerRegistry]"
+            "value": "[variables('containerRegistryName')]"
           },
           "keyVaultName": {
-            "value": "[reference(subscriptionResourceId('Microsoft.Resources/deployments', 'governance-baseline'), '2025-04-01').outputs.baseline.value.naming.resources.platformKeyVault]"
+            "value": "[variables('platformKeyVaultName')]"
           },
           "infrastructureSubnetId": {
             "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('connectivityResourceGroupName')), 'Microsoft.Resources/deployments', 'hub-network-foundation'), '2025-04-01').outputs.foundation.value.subnetIds.containerAppsInfrastructure]"
@@ -2754,7 +2370,6 @@
         }
       },
       "dependsOn": [
-        "[subscriptionResourceId('Microsoft.Resources/deployments', 'governance-baseline')]",
         "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('connectivityResourceGroupName')), 'Microsoft.Resources/deployments', 'hub-network-foundation')]",
         "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('platformResourceGroupName'))]",
         "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('platformResourceGroupName')), 'Microsoft.Resources/deployments', 'shared-platform-services')]"
@@ -2762,21 +2377,9 @@
     }
   ],
   "outputs": {
-    "governanceBaseline": {
-      "type": "object",
-      "value": "[reference(subscriptionResourceId('Microsoft.Resources/deployments', 'governance-baseline'), '2025-04-01').outputs.baseline.value]"
-    },
     "requiredTags": {
       "type": "object",
-      "value": "[reference(subscriptionResourceId('Microsoft.Resources/deployments', 'governance-baseline'), '2025-04-01').outputs.requiredTags.value]"
-    },
-    "diagnosticsDefaults": {
-      "type": "object",
-      "value": "[reference(subscriptionResourceId('Microsoft.Resources/deployments', 'governance-baseline'), '2025-04-01').outputs.diagnosticsDefaults.value]"
-    },
-    "allowedServiceTiers": {
-      "type": "object",
-      "value": "[reference(subscriptionResourceId('Microsoft.Resources/deployments', 'governance-baseline'), '2025-04-01').outputs.allowedServiceTiers.value]"
+      "value": "[variables('requiredTags')]"
     },
     "hubNetworkFoundation": {
       "type": "object",

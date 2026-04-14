@@ -3,7 +3,7 @@ targetScope = 'subscription'
 @description('Azure region used for landing-zone metadata and subscription-scope deployments.')
 param primaryLocation string
 
-@description('Short landing-zone identifier used in names, tags, and budget resources.')
+@description('Short landing-zone identifier used in names and tags.')
 @minLength(2)
 @maxLength(12)
 param landingZoneName string
@@ -22,21 +22,8 @@ param platformOwner string
 @description('Cost center, cost code, or internal chargeback reference.')
 param platformCostCenter string
 
-@description('Additional tags merged into the shared governance baseline.')
+@description('Additional tags merged into the landing-zone resource tags.')
 param tags object = {}
-
-@description('Existing Log Analytics workspace resource ID used for diagnostic settings defaults. Leave empty until observability resources exist.')
-param diagnosticsWorkspaceResourceId string = ''
-
-@description('Monthly subscription budget amount in the subscription billing currency.')
-@minValue(1)
-param budgetAmount int = 150
-
-@description('Budget period start date in ISO 8601 format, for example 2025-01-01T00:00:00Z.')
-param budgetStartDate string
-
-@description('Email recipients for budget threshold notifications.')
-param budgetContactEmails array
 
 @description('Hub platform network configuration, including address planning and DNS baseline metadata.')
 param hubNetworkConfig object = {
@@ -136,6 +123,7 @@ param runnerExecutionConfig object = {
 param workloadSpokes array = []
 
 var locationToken = toLower(replace(primaryLocation, ' ', ''))
+var landingZoneToken = toLower(replace(landingZoneName, '-', ''))
 var prefix = '${landingZoneName}-${environment}'
 var requiredTags = union({
   'alz:landingZone': landingZoneName
@@ -148,6 +136,17 @@ var requiredTags = union({
 var connectivityResourceGroupName = 'rg-${prefix}-connectivity-${locationToken}'
 var platformResourceGroupName = 'rg-${prefix}-platform-${locationToken}'
 var hubVnetName = 'vnet-${prefix}-hub-${locationToken}'
+var sharedServicesSubnetName = 'snet-${prefix}-shared-services'
+var privateEndpointsSubnetName = 'snet-${prefix}-private-endpoints'
+var runnerInfrastructureSubnetName = 'snet-${prefix}-runners'
+var vpnGatewayPublicIpName = 'pip-${prefix}-vpn-${locationToken}'
+var vpnGatewayName = 'vpngw-${prefix}-${locationToken}'
+var containerAppsEnvironmentName = 'cae-${prefix}-${locationToken}'
+var containerRegistryName = take('acr${landingZoneToken}${environment}${take(locationToken, 6)}', 50)
+var platformKeyVaultName = take('kv-${prefix}-${locationToken}', 24)
+var runnerJobName = 'job-${prefix}-github'
+var runnerExecutionIdentityName = 'id-${prefix}-runner-exec'
+var runnerRegistryIdentityName = 'id-${prefix}-runner-reg'
 var workloadSpokeDefinitions = [for spoke in workloadSpokes: {
   name: spoke.name
   token: toLower(replace(replace(spoke.name, ' ', '-'), '_', '-'))
@@ -156,22 +155,6 @@ var workloadSpokeDefinitions = [for spoke in workloadSpokes: {
   addressPrefixes: spoke.addressPrefixes
   subnetPrefixes: spoke.subnetPrefixes
 }]
-
-module governanceBaseline '../modules/governance/baseline.bicep' = {
-  name: 'governance-baseline'
-  params: {
-    primaryLocation: primaryLocation
-    landingZoneName: landingZoneName
-    environment: environment
-    platformOwner: platformOwner
-    platformCostCenter: platformCostCenter
-    tags: tags
-    diagnosticsWorkspaceResourceId: diagnosticsWorkspaceResourceId
-    budgetAmount: budgetAmount
-    budgetStartDate: budgetStartDate
-    budgetContactEmails: budgetContactEmails
-  }
-}
 
 resource connectivityResourceGroup 'Microsoft.Resources/resourceGroups@2024-11-01' = {
   name: connectivityResourceGroupName
@@ -193,9 +176,9 @@ module hubNetwork '../modules/connectivity/hub-network.bicep' = {
     tags: requiredTags
     vnetName: hubVnetName
     subnetNames: {
-      sharedServices: governanceBaseline.outputs.baseline.naming.resources.sharedServicesSubnet
-      privateEndpoints: governanceBaseline.outputs.baseline.naming.resources.privateEndpointsSubnet
-      containerAppsInfrastructure: governanceBaseline.outputs.baseline.naming.resources.runnerInfrastructureSubnet
+      sharedServices: sharedServicesSubnetName
+      privateEndpoints: privateEndpointsSubnetName
+      containerAppsInfrastructure: runnerInfrastructureSubnetName
     }
     hubNetworkConfig: hubNetworkConfig
     vpnClientAddressPool: operatorConnectivityConfig.vpnClientAddressPool
@@ -278,8 +261,8 @@ module operatorConnectivity '../modules/connectivity/operator-connectivity.bicep
   params: {
     location: primaryLocation
     tags: requiredTags
-    gatewayPublicIpName: governanceBaseline.outputs.baseline.naming.resources.vpnGatewayPublicIp
-    virtualNetworkGatewayName: governanceBaseline.outputs.baseline.naming.resources.vpnGateway
+    gatewayPublicIpName: vpnGatewayPublicIpName
+    virtualNetworkGatewayName: vpnGatewayName
     gatewaySubnetId: hubNetwork.outputs.foundation.subnetIds.gateway
     vpnGatewaySku: operatorConnectivityConfig.vpnGatewaySku
     vpnClientAddressPool: operatorConnectivityConfig.vpnClientAddressPool
@@ -297,8 +280,8 @@ module sharedServices '../modules/platform/shared-services.bicep' = {
     tags: requiredTags
     hubVirtualNetworkId: hubNetwork.outputs.foundation.vnetId
     privateEndpointSubnetId: hubNetwork.outputs.foundation.subnetIds.privateEndpoints
-    containerRegistryName: governanceBaseline.outputs.baseline.naming.resources.containerRegistry
-    keyVaultName: governanceBaseline.outputs.baseline.naming.resources.platformKeyVault
+    containerRegistryName: containerRegistryName
+    keyVaultName: platformKeyVaultName
     sharedServicesConfig: sharedServicesConfig
   }
 }
@@ -309,12 +292,12 @@ module runnerExecution '../modules/platform/runner-execution.bicep' = {
   params: {
     location: primaryLocation
     tags: requiredTags
-    containerAppsEnvironmentName: governanceBaseline.outputs.baseline.naming.resources.containerAppsEnvironment
-    runnerJobName: governanceBaseline.outputs.baseline.naming.resources.runnerJob
-    runnerExecutionIdentityName: governanceBaseline.outputs.baseline.naming.resources.runnerExecutionIdentity
-    runnerRegistryIdentityName: governanceBaseline.outputs.baseline.naming.resources.runnerRegistryIdentity
-    containerRegistryName: governanceBaseline.outputs.baseline.naming.resources.containerRegistry
-    keyVaultName: governanceBaseline.outputs.baseline.naming.resources.platformKeyVault
+    containerAppsEnvironmentName: containerAppsEnvironmentName
+    runnerJobName: runnerJobName
+    runnerExecutionIdentityName: runnerExecutionIdentityName
+    runnerRegistryIdentityName: runnerRegistryIdentityName
+    containerRegistryName: containerRegistryName
+    keyVaultName: platformKeyVaultName
     infrastructureSubnetId: hubNetwork.outputs.foundation.subnetIds.containerAppsInfrastructure
     runnerExecutionConfig: runnerExecutionConfig
   }
@@ -347,10 +330,7 @@ var deployedWorkloadSpokes = [for spoke in workloadSpokeDefinitions: {
   }
 }]
 
-output governanceBaseline object = governanceBaseline.outputs.baseline
-output requiredTags object = governanceBaseline.outputs.requiredTags
-output diagnosticsDefaults object = governanceBaseline.outputs.diagnosticsDefaults
-output allowedServiceTiers object = governanceBaseline.outputs.allowedServiceTiers
+output requiredTags object = requiredTags
 output hubNetworkFoundation object = hubNetwork.outputs.foundation
 output operatorConnectivity object = operatorConnectivity.outputs.connectivity
 output sharedPlatformServices object = sharedServices.outputs.sharedServices
