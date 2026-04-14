@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.39.26.7824",
-      "templateHash": "17610746500988350797"
+      "templateHash": "9306312414141243868"
     }
   },
   "parameters": {
@@ -219,7 +219,7 @@
     "sharedServicesSubnetName": "[format('snet-{0}-shared-services', variables('prefix'))]",
     "privateEndpointsSubnetName": "[format('snet-{0}-private-endpoints', variables('prefix'))]",
     "runnerInfrastructureSubnetName": "[format('snet-{0}-runners', variables('prefix'))]",
-    "vpnGatewayPublicIpName": "[format('pip-{0}-vpn-{1}', variables('prefix'), variables('locationToken'))]",
+    "vpnGatewayPublicIpName": "[format('pip-{0}-vpn-az-{1}', variables('prefix'), variables('locationToken'))]",
     "vpnGatewayName": "[format('vpngw-{0}-{1}', variables('prefix'), variables('locationToken'))]",
     "containerAppsEnvironmentName": "[format('cae-{0}-{1}', variables('prefix'), variables('locationToken'))]",
     "containerRegistryName": "[take(format('acr{0}{1}{2}', variables('landingZoneToken'), parameters('environment'), take(variables('locationToken'), 6)), 50)]",
