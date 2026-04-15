@@ -13,7 +13,7 @@ Your job is to create or refine the workflow that deploys the Azure landing zone
 ## Workflow assumptions
 
 - The workflow will eventually deploy Bicep-based infrastructure.
-- The landing zone includes ACA Jobs runners, but the workflow must account for bootstrap phases before that runner platform exists.
+- The landing zone includes VMSS runners, but the workflow must account for bootstrap phases before that runner platform exists.
 - Azure authentication should use GitHub OIDC, not long-lived credentials.
 
 ## Authoring rules

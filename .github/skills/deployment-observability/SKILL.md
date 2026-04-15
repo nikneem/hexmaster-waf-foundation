@@ -25,7 +25,7 @@ Use this skill when adding verification and troubleshooting support to the landi
   - hub VNet and spoke connectivity
   - VPN gateway presence
   - ACR readiness
-  - ACA Jobs runner resources
+  - VMSS runner resources
   - private endpoint and DNS dependencies if present
 
 ## Operator handoff

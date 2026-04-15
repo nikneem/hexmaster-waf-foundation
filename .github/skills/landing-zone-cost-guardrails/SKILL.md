@@ -21,7 +21,7 @@ The landing zone is intended to be Well-Architected and extremely cost effective
 - Avoid Azure Bastion by default.
 - Avoid Azure Firewall by default.
 - Avoid NAT Gateway unless there is a proven need.
-- Prefer ACA Jobs or other scale-to-zero patterns where they fit.
+- Prefer VM scale set or other scale-to-zero patterns where they fit.
 - Keep monitoring retention and premium SKUs intentional.
 - Prefer a single hub with later growth paths over premature platform sprawl.
 

@@ -30,7 +30,7 @@ Use this skill when choosing Azure roles for the GitHub federated identity, depl
 
 - Does the workflow need to create resource groups or only deploy into existing ones?
 - Does it need role assignment rights, or should role assignments be staged separately?
-- Are there identities for ACA Jobs runners that need narrower runtime roles than the workflow identity?
+- Are there identities for VMSS runners that need narrower runtime roles than the workflow identity?
 
 ## Reuse
 

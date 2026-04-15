@@ -15,7 +15,7 @@ Your job is to make the landing-zone deployment workflow observable and supporta
 - deployment summaries in `GITHUB_STEP_SUMMARY`
 - artifact capture for what-if output and deployment outputs
 - post-deploy verification steps
-- Azure diagnostics hooks for ACR, networking, ACA Jobs, and private connectivity
+- Azure diagnostics hooks for ACR, networking, VMSS runners, and private connectivity
 - practical operator guidance for break-glass investigation
 
 ## Operational rules

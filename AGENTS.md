@@ -17,7 +17,7 @@ They should preserve the current architectural direction:
 - **low-cost defaults**
 - **Point-to-Site VPN** for operator access
 - **central ACR**
-- **GitHub runners on Azure Container Apps Jobs**
+- **GitHub runners on Azure Virtual Machine Scale Sets**
 - the **hub is a platform network**, not a general workload network
 
 For Azure, Bicep, GitHub Actions, and Microsoft platform questions, agents should prefer the **Microsoft Learn MCP** when current official guidance is needed.
@@ -108,7 +108,7 @@ It is the best fit for:
 - artifact capture for previews and outputs
 - post-deploy health checks
 - operator-facing Azure diagnostic commands
-- triage guidance for ACR, networking, VPN, and ACA Jobs runner issues
+- triage guidance for ACR, networking, VPN, and VMSS runner issues
 
 It should keep observability practical and cost-aware.
 

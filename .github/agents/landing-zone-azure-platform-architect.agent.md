@@ -21,7 +21,7 @@ Your job is to translate the landing-zone requirements into a coherent Azure dep
   - low-cost defaults
   - P2S VPN operator access
   - central ACR
-  - GitHub runners on Azure Container Apps Jobs
+  - GitHub runners on Azure Virtual Machine Scale Sets
 - Treat the hub as a platform network, not a general workload network.
 - Prefer Azure Verified Modules when they fit cleanly.
 

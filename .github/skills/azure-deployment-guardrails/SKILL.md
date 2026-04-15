@@ -32,7 +32,7 @@ Use this skill when writing the validation and preview parts of the landing zone
 - Keep preview output as an artifact or summary.
 - Use path filters where they reduce unnecessary infra runs.
 - Make manual dispatch inputs explicit for higher-risk changes.
-- Treat bootstrap constraints as first-class: the workflow must still work before the ACA Jobs runner platform exists.
+- Treat bootstrap constraints as first-class: the workflow must still work before the VMSS runner platform exists.
 
 ## Reuse
 
