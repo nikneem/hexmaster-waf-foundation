@@ -120,11 +120,28 @@ az deployment sub show `
 
 ### Runner registration defaults
 
-The landing-zone runner configuration now targets the GitHub organization runner endpoint by default:
+The landing-zone runner uses **Azure Container Apps Jobs** with the KEDA `github-runner` scaler. A single GitHub PAT stored in Key Vault handles both:
+
+1. **KEDA scaling** — polls the GitHub API for queued workflow jobs
+2. **Runner registration** — the container entrypoint calls the [registration token API](https://docs.github.com/en/rest/actions/self-hosted-runners#create-a-registration-token-for-an-organization) at runtime to get a short-lived token, then runs `config.sh --ephemeral`
+
+Runners are **ephemeral** — they register, execute one workflow job, then deregister. They only appear in the GitHub UI while actively running a job.
+
+#### PAT requirements
+
+Create a classic PAT with the following scopes and store it as `github-actions-pat` in the platform Key Vault:
+
+- `admin:org` — required to generate organization-level runner registration tokens
+- `repo` — required for KEDA to detect queued jobs on private repositories
+
+Then set `runnerExecutionConfig.githubPatSecretUri` to the Key Vault secret URI (e.g. `https://<vault-name>.vault.azure.net/secrets/github-actions-pat`).
+
+#### Runner image bootstrap
+
+Before the ACA Job can start, the runner container image must be pushed to the central ACR:
 
 ```bash
-./config.sh --url https://github.com/hexmasternl --runnergroup "HexMaster Landingzone" --token {{organizationsecret.RUNNER_DEPLOYMENT_TOKEN}}
-./run.sh
+az acr build --registry <acr-name> --image github-actions-runner:latest ./infra/runner-image
 ```
 
-Store the Container Apps scaler PAT in the Key Vault secret referenced by `runnerExecutionConfig.githubPatSecretUri`, and store the organization runner registration token in `runnerExecutionConfig.runnerDeploymentTokenSecretUri`.
+> **Note:** The central ACR has public network access disabled. For the initial image build, either temporarily enable public access on the ACR or push via VPN/private endpoint connectivity.

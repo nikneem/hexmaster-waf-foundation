@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.39.26.7824",
-      "templateHash": "14083618335960753702"
+      "templateHash": "772027005682591537"
     }
   },
   "parameters": {
@@ -154,8 +154,6 @@
         "memory": "4Gi",
         "githubPatSecretName": "github-actions-pat",
         "githubPatSecretUri": "",
-        "runnerDeploymentTokenSecretName": "runner-deployment-token",
-        "runnerDeploymentTokenSecretUri": "",
         "registrationTokenApiUrl": "https://api.github.com/orgs/hexmasternl/actions/runners/registration-token"
       },
       "metadata": {
@@ -2061,7 +2059,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.39.26.7824",
-              "templateHash": "9956401432117662971"
+              "templateHash": "15791837554495608675"
             }
           },
           "parameters": {
@@ -2144,8 +2142,6 @@
                 "memory": "4Gi",
                 "githubPatSecretName": "github-actions-pat",
                 "githubPatSecretUri": "",
-                "runnerDeploymentTokenSecretName": "runner-deployment-token",
-                "runnerDeploymentTokenSecretUri": "",
                 "registrationTokenApiUrl": "https://api.github.com/orgs/hexmasternl/actions/runners/registration-token"
               },
               "metadata": {
@@ -2156,7 +2152,7 @@
           "variables": {
             "acrPullRoleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')]",
             "keyVaultSecretsUserRoleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-408a-b874-0445c86b69e6')]",
-            "deployRunnerJob": "[and(and(and(and(parameters('runnerExecutionConfig').deployRunnerJob, not(empty(parameters('runnerExecutionConfig').githubUrl))), not(empty(parameters('runnerExecutionConfig').registrationTokenApiUrl))), not(empty(parameters('runnerExecutionConfig').githubPatSecretUri))), not(empty(parameters('runnerExecutionConfig').runnerDeploymentTokenSecretUri)))]"
+            "deployRunnerJob": "[and(and(and(parameters('runnerExecutionConfig').deployRunnerJob, not(empty(parameters('runnerExecutionConfig').githubUrl))), not(empty(parameters('runnerExecutionConfig').registrationTokenApiUrl))), not(empty(parameters('runnerExecutionConfig').githubPatSecretUri)))]"
           },
           "resources": [
             {
@@ -2245,11 +2241,6 @@
                       "name": "[parameters('runnerExecutionConfig').githubPatSecretName]",
                       "identity": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('runnerExecutionIdentityName'))]",
                       "keyVaultUrl": "[parameters('runnerExecutionConfig').githubPatSecretUri]"
-                    },
-                    {
-                      "name": "[parameters('runnerExecutionConfig').runnerDeploymentTokenSecretName]",
-                      "identity": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('runnerExecutionIdentityName'))]",
-                      "keyVaultUrl": "[parameters('runnerExecutionConfig').runnerDeploymentTokenSecretUri]"
                     }
                   ],
                   "eventTriggerConfig": {
@@ -2290,10 +2281,6 @@
                         {
                           "name": "GITHUB_PAT",
                           "secretRef": "[parameters('runnerExecutionConfig').githubPatSecretName]"
-                        },
-                        {
-                          "name": "RUNNER_DEPLOYMENT_TOKEN",
-                          "secretRef": "[parameters('runnerExecutionConfig').runnerDeploymentTokenSecretName]"
                         },
                         {
                           "name": "GH_URL",
@@ -2371,8 +2358,8 @@
                     "Image pulls use the dedicated registry identity against the private central ACR, and secret retrieval uses Key Vault over private endpoint connectivity."
                   ],
                   "secretHandlingModel": [
-                    "The job references a Key Vault secret URI for the GitHub PAT used by the Container Apps GitHub scaler instead of storing PAT values in the template or repository.",
-                    "The runner bootstrap token is provided through a separate Key Vault secret so the config.sh registration experience can target the GitHub organization runner group without reusing the scaler PAT.",
+                    "A single GitHub PAT stored in Key Vault is used by both the KEDA scaler (to detect queued jobs) and the container entrypoint (to request a short-lived registration token from the GitHub API at runtime).",
+                    "Registration tokens are ephemeral (1-hour lifetime) and generated on each job execution — they are never stored in Key Vault.",
                     "Only the runner execution identity receives Key Vault secret access; operators and future workload identities remain separate."
                   ],
                   "platformConstraints": [
@@ -2380,8 +2367,8 @@
                     "Use this runner platform only for private repositories.",
                     "Container Apps jobs do not support Docker-in-Docker workflows."
                   ],
-                  "bootstrapCommand": "./config.sh --url https://github.com/hexmasternl --runnergroup \"HexMaster Landingzone\" --token {{organizationsecret.RUNNER_DEPLOYMENT_TOKEN}}",
-                  "startCommand": "./run.sh"
+                  "bootstrapNotes": "The container entrypoint handles registration automatically. It uses the GITHUB_PAT env var to call the registration token API at runtime, then runs config.sh --ephemeral and run.sh for a single job execution.",
+                  "requiredPatScopes": "The PAT stored in Key Vault needs admin:org scope to generate registration tokens and repo scope for KEDA to detect queued workflow jobs."
                 }
               }
             }

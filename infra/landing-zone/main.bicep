@@ -112,8 +112,6 @@ param runnerExecutionConfig object = {
   memory: '4Gi'
   githubPatSecretName: 'github-actions-pat'
   githubPatSecretUri: ''
-  runnerDeploymentTokenSecretName: 'runner-deployment-token'
-  runnerDeploymentTokenSecretUri: ''
   registrationTokenApiUrl: 'https://api.github.com/orgs/hexmasternl/actions/runners/registration-token'
 }
 

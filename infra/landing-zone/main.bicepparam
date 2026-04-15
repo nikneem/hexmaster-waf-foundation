@@ -72,7 +72,7 @@ param sharedServicesConfig = {
 }
 
 param runnerExecutionConfig = {
-  deployRunnerJob: false
+  deployRunnerJob: true
   imageRepository: 'github-actions-runner'
   imageTag: 'latest'
   githubApiUrl: 'https://api.github.com'
@@ -93,8 +93,6 @@ param runnerExecutionConfig = {
   memory: '4Gi'
   githubPatSecretName: 'github-actions-pat'
   githubPatSecretUri: ''
-  runnerDeploymentTokenSecretName: 'runner-deployment-token'
-  runnerDeploymentTokenSecretUri: ''
   registrationTokenApiUrl: 'https://api.github.com/orgs/hexmasternl/actions/runners/registration-token'
 }
 

@@ -50,14 +50,12 @@ param runnerExecutionConfig object = {
   memory: '4Gi'
   githubPatSecretName: 'github-actions-pat'
   githubPatSecretUri: ''
-  runnerDeploymentTokenSecretName: 'runner-deployment-token'
-  runnerDeploymentTokenSecretUri: ''
   registrationTokenApiUrl: 'https://api.github.com/orgs/hexmasternl/actions/runners/registration-token'
 }
 
 var acrPullRoleDefinitionId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')
 var keyVaultSecretsUserRoleDefinitionId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-408a-b874-0445c86b69e6')
-var deployRunnerJob = runnerExecutionConfig.deployRunnerJob && !empty(runnerExecutionConfig.githubUrl) && !empty(runnerExecutionConfig.registrationTokenApiUrl) && !empty(runnerExecutionConfig.githubPatSecretUri) && !empty(runnerExecutionConfig.runnerDeploymentTokenSecretUri)
+var deployRunnerJob = runnerExecutionConfig.deployRunnerJob && !empty(runnerExecutionConfig.githubUrl) && !empty(runnerExecutionConfig.registrationTokenApiUrl) && !empty(runnerExecutionConfig.githubPatSecretUri)
 var runnerImage = '${containerRegistry.properties.loginServer}/${runnerExecutionConfig.imageRepository}:${runnerExecutionConfig.imageTag}'
 
 resource containerRegistry 'Microsoft.ContainerRegistry/registries@2025-04-01' existing = {
@@ -141,11 +139,6 @@ resource githubRunnerJob 'Microsoft.App/jobs@2025-01-01' = if (deployRunnerJob) 
           identity: runnerExecutionIdentity.id
           keyVaultUrl: runnerExecutionConfig.githubPatSecretUri
         }
-        {
-          name: runnerExecutionConfig.runnerDeploymentTokenSecretName
-          identity: runnerExecutionIdentity.id
-          keyVaultUrl: runnerExecutionConfig.runnerDeploymentTokenSecretUri
-        }
       ]
       eventTriggerConfig: {
         parallelism: runnerExecutionConfig.parallelism
@@ -185,10 +178,6 @@ resource githubRunnerJob 'Microsoft.App/jobs@2025-01-01' = if (deployRunnerJob) 
             {
               name: 'GITHUB_PAT'
               secretRef: runnerExecutionConfig.githubPatSecretName
-            }
-            {
-              name: 'RUNNER_DEPLOYMENT_TOKEN'
-              secretRef: runnerExecutionConfig.runnerDeploymentTokenSecretName
             }
             {
               name: 'GH_URL'
@@ -258,8 +247,8 @@ output runnerPlatform object = {
       'Image pulls use the dedicated registry identity against the private central ACR, and secret retrieval uses Key Vault over private endpoint connectivity.'
     ]
     secretHandlingModel: [
-      'The job references a Key Vault secret URI for the GitHub PAT used by the Container Apps GitHub scaler instead of storing PAT values in the template or repository.'
-      'The runner bootstrap token is provided through a separate Key Vault secret so the config.sh registration experience can target the GitHub organization runner group without reusing the scaler PAT.'
+      'A single GitHub PAT stored in Key Vault is used by both the KEDA scaler (to detect queued jobs) and the container entrypoint (to request a short-lived registration token from the GitHub API at runtime).'
+      'Registration tokens are ephemeral (1-hour lifetime) and generated on each job execution — they are never stored in Key Vault.'
       'Only the runner execution identity receives Key Vault secret access; operators and future workload identities remain separate.'
     ]
     platformConstraints: [
@@ -267,7 +256,7 @@ output runnerPlatform object = {
       'Use this runner platform only for private repositories.'
       'Container Apps jobs do not support Docker-in-Docker workflows.'
     ]
-    bootstrapCommand: './config.sh --url https://github.com/hexmasternl --runnergroup "HexMaster Landingzone" --token {{organizationsecret.RUNNER_DEPLOYMENT_TOKEN}}'
-    startCommand: './run.sh'
+    bootstrapNotes: 'The container entrypoint handles registration automatically. It uses the GITHUB_PAT env var to call the registration token API at runtime, then runs config.sh --ephemeral and run.sh for a single job execution.'
+    requiredPatScopes: 'The PAT stored in Key Vault needs admin:org scope to generate registration tokens and repo scope for KEDA to detect queued workflow jobs.'
   }
 }
