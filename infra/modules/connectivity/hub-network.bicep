@@ -96,21 +96,21 @@ resource privateEndpointsNsg 'Microsoft.Network/networkSecurityGroups@2024-05-01
   }
 }
 
-resource containerAppsInfrastructureNsg 'Microsoft.Network/networkSecurityGroups@2024-05-01' = {
-  name: 'nsg-${subnetNames.containerAppsInfrastructure}'
+resource runnerInfrastructureNsg 'Microsoft.Network/networkSecurityGroups@2024-05-01' = {
+  name: 'nsg-${subnetNames.runnerInfrastructure}'
   location: location
   tags: tags
   properties: {
     securityRules: [
       {
-        name: 'AllowOperatorP2SControlPlaneInbound'
+        name: 'AllowOperatorP2SInbound'
         properties: {
-          description: 'Allows break-glass operators to reach internal HTTPS endpoints exposed through the Container Apps environment.'
+          description: 'Allows break-glass operators to reach runner VMs over SSH.'
           protocol: 'Tcp'
           sourcePortRange: '*'
-          destinationPortRange: '443'
+          destinationPortRange: '22'
           sourceAddressPrefix: vpnClientAddressPool
-          destinationAddressPrefix: subnetPrefixes.containerAppsInfrastructure
+          destinationAddressPrefix: subnetPrefixes.runnerInfrastructure
           access: 'Allow'
           priority: 100
           direction: 'Inbound'
@@ -154,13 +154,42 @@ resource privateEndpointsRouteTable 'Microsoft.Network/routeTables@2024-05-01' =
   }
 }
 
-resource containerAppsInfrastructureRouteTable 'Microsoft.Network/routeTables@2024-05-01' = {
-  name: 'rt-${subnetNames.containerAppsInfrastructure}'
+resource runnerInfrastructureRouteTable 'Microsoft.Network/routeTables@2024-05-01' = {
+  name: 'rt-${subnetNames.runnerInfrastructure}'
   location: location
   tags: tags
   properties: {
     disableBgpRoutePropagation: false
     routes: []
+  }
+}
+
+resource runnerSubnetNatPublicIp 'Microsoft.Network/publicIPAddresses@2024-05-01' = {
+  name: 'pip-${subnetNames.runnerInfrastructure}-nat'
+  location: location
+  tags: tags
+  sku: {
+    name: 'Standard'
+  }
+  properties: {
+    publicIPAllocationMethod: 'Static'
+  }
+}
+
+resource runnerSubnetNatGateway 'Microsoft.Network/natGateways@2024-05-01' = {
+  name: 'nat-${subnetNames.runnerInfrastructure}'
+  location: location
+  tags: tags
+  sku: {
+    name: 'Standard'
+  }
+  properties: {
+    publicIpAddresses: [
+      {
+        id: runnerSubnetNatPublicIp.id
+      }
+    ]
+    idleTimeoutInMinutes: 10
   }
 }
 
@@ -209,23 +238,18 @@ resource hubVnet 'Microsoft.Network/virtualNetworks@2024-05-01' = {
         }
       }
       {
-        name: subnetNames.containerAppsInfrastructure
+        name: subnetNames.runnerInfrastructure
         properties: {
-          addressPrefix: subnetPrefixes.containerAppsInfrastructure
+          addressPrefix: subnetPrefixes.runnerInfrastructure
           networkSecurityGroup: {
-            id: containerAppsInfrastructureNsg.id
+            id: runnerInfrastructureNsg.id
           }
           routeTable: {
-            id: containerAppsInfrastructureRouteTable.id
+            id: runnerInfrastructureRouteTable.id
           }
-          delegations: [
-            {
-              name: 'acaEnvironmentDelegation'
-              properties: {
-                serviceName: 'Microsoft.App/environments'
-              }
-            }
-          ]
+          natGateway: {
+            id: runnerSubnetNatGateway.id
+          }
         }
       }
     ]
@@ -239,17 +263,21 @@ output foundation object = {
     gateway: resourceId('Microsoft.Network/virtualNetworks/subnets', hubVnet.name, 'GatewaySubnet')
     sharedServices: resourceId('Microsoft.Network/virtualNetworks/subnets', hubVnet.name, subnetNames.sharedServices)
     privateEndpoints: resourceId('Microsoft.Network/virtualNetworks/subnets', hubVnet.name, subnetNames.privateEndpoints)
-    containerAppsInfrastructure: resourceId('Microsoft.Network/virtualNetworks/subnets', hubVnet.name, subnetNames.containerAppsInfrastructure)
+    runnerInfrastructure: resourceId('Microsoft.Network/virtualNetworks/subnets', hubVnet.name, subnetNames.runnerInfrastructure)
   }
   routeTables: {
     sharedServices: sharedServicesRouteTable.id
     privateEndpoints: privateEndpointsRouteTable.id
-    containerAppsInfrastructure: containerAppsInfrastructureRouteTable.id
+    runnerInfrastructure: runnerInfrastructureRouteTable.id
   }
   networkSecurityGroups: {
     sharedServices: sharedServicesNsg.id
     privateEndpoints: privateEndpointsNsg.id
-    containerAppsInfrastructure: containerAppsInfrastructureNsg.id
+    runnerInfrastructure: runnerInfrastructureNsg.id
+  }
+  natGateway: {
+    id: runnerSubnetNatGateway.id
+    publicIpAddressId: runnerSubnetNatPublicIp.id
   }
   addressPlan: {
     hubAddressPrefixes: hubNetworkConfig.addressPrefixes
@@ -258,7 +286,7 @@ output foundation object = {
     futureSpokeSupernet: hubNetworkConfig.futureSpokeSupernet
     notes: [
       'The hub is reserved for platform connectivity, shared services, and runner infrastructure.'
-      'The Container Apps infrastructure subnet is pre-sized to avoid later subnet replacement.'
+      'The runner subnet is dedicated to the VM scale set and keeps runner compute separate from shared services and operators.'
       'The future spoke supernet is intentionally separate from the hub VNet to keep peering straightforward.'
     ]
   }

@@ -9,7 +9,7 @@ This repository now uses a **Bicep-first** layout for the Azure landing zone fou
 - `modules\connectivity\hub-network.bicep` - hub VNet, subnetting, NSGs, route tables, and DNS baseline outputs
 - `modules\connectivity\operator-connectivity.bicep` - Point-to-Site VPN gateway and operator access outputs
 - `modules\platform\shared-services.bicep` - hub-hosted shared services including the existing central ACR connectivity, Key Vault, private endpoints, and private DNS
-- `modules\platform\runner-execution.bicep` - Container Apps environment, runner identities, and optional GitHub runner job definition
+- `modules\platform\runner-execution.bicep` - VM scale set runner platform, execution identity, and webhook autoscaler Function App
 - `modules\connectivity\workload-spoke.bicep` - standard workload spoke VNet, subnet isolation, and shared-service flow guardrails
 - `landing-zone\workload-spokes.example.bicepparam` - example workload spoke onboarding parameters that align with the reserved spoke supernet
 - `operations\break-glass-operating-model.yaml` - operator break-glass operating model and validation checks
@@ -18,13 +18,13 @@ This repository now uses a **Bicep-first** layout for the Azure landing zone fou
 
 This scaffold implements OpenSpec tasks:
 
-- **2.1** hub VNet address planning and dedicated subnets for VPN, shared services, private endpoints, and Container Apps infrastructure
+- **2.1** hub VNet address planning and dedicated subnets for VPN, shared services, private endpoints, and runner infrastructure
 - **2.2** baseline NSG, route-table, and DNS patterns that keep the hub spoke-ready
 - **3.1** Point-to-Site VPN gateway, OpenVPN tunnel path, and Microsoft Entra ID authentication metadata
 - **3.2** break-glass operating model for reaching approved hub resources and peered spokes
 - **4.1** central Azure Container Registry integration and shared image consumption
 - **4.2** shared-service hosting pattern in a dedicated platform resource group with central private endpoint and DNS placement for future hub services
-- **5.1** Azure Container Apps managed environment boundary for GitHub runners on the dedicated hub runner subnet
+- **5.1** GitHub runner VM scale set boundary and webhook-driven autoscaling on the dedicated hub runner subnet
 - **5.2** runner identities, ACR image pull model, Key Vault secret references, and private connectivity notes for hub-hosted services
 - **6.1** workload spoke VNet pattern, peering model, and address-space onboarding constraints
 - **6.2** workload-to-hub traffic guardrails for shared services access without enabling spoke-to-spoke transit
@@ -113,35 +113,32 @@ az deployment sub show `
 - Private DNS is centralized in the hub using Azure-provided DNS initially, with hub-linked private zones for future services
 - Break-glass reachability to spokes depends on hub-spoke peering with **allowGatewayTransit** and **useRemoteGateways**
 - The shared Key Vault is deployed into the platform resource group, while the existing central ACR (`nvv54gsk4pteu`) in resource group `mvp-int-env` is consumed as an external dependency without landing-zone-managed network changes
-- Runner jobs use a dedicated Container Apps environment with separate identities for image pull and workload execution
+- Runner compute uses a dedicated VM scale set resource group and hub subnet, with separate identities for workload execution and deployment automation
 - The default runner registration target is the GitHub organization `hexmasternl` in the `HexMaster Landingzone` runner group
 - Workload spokes are allocated from the reserved **10.32.0.0/12** supernet and are expected to reserve space for workload, private-endpoint, and future expansion ranges
 - Spoke NSGs allow only approved access to hub **shared-services** and **private-endpoints** prefixes and deny lateral traffic to the wider hub and other spokes
 
 ### Runner registration defaults
 
-The landing-zone runner uses **Azure Container Apps Jobs** with the KEDA `github-runner` scaler. A single GitHub PAT stored in Key Vault handles both:
+The landing-zone runner uses an **Azure Virtual Machine Scale Set** plus a lightweight **Azure Function** webhook autoscaler. A single GitHub PAT stored in Key Vault handles both:
 
-1. **KEDA scaling** — polls the GitHub API for queued workflow jobs
-2. **Runner registration** — the container entrypoint calls the [registration token API](https://docs.github.com/en/rest/actions/self-hosted-runners#create-a-registration-token-for-an-organization) at runtime to get a short-lived token, then runs `config.sh --ephemeral`
+1. **Webhook-driven scaling** — the Function App reacts to `workflow_job` events and changes VMSS capacity between `0` and `10`
+2. **Runner registration** — the VMSS cloud-init bootstrap calls the [registration token API](https://docs.github.com/en/rest/actions/self-hosted-runners#create-a-registration-token-for-an-organization) at runtime and runs `config.sh --ephemeral`
 
-Runners are **ephemeral** — they register, execute one workflow job, then deregister. They only appear in the GitHub UI while actively running a job.
+Runner registrations are **ephemeral** — each VM instance registers for a single job, executes it, deregisters, and then the systemd service is ready to register again while the VM remains in the scale set.
 
-#### PAT requirements
+#### Secret requirements
 
-Create a classic PAT with the following scopes and store it as `github-actions-pat` in the platform Key Vault:
+Create these secrets in the platform Key Vault:
 
-- `admin:org` — required to generate organization-level runner registration tokens
-- `repo` — required for KEDA to detect queued jobs on private repositories
+- `github-actions-pat` — classic PAT with `admin:org` and `repo` scope
+- `github-webhook-secret` — shared secret used to validate the GitHub `workflow_job` webhook payload
 
-Then set `runnerExecutionConfig.githubPatSecretUri` to the Key Vault secret URI (e.g. `https://<vault-name>.vault.azure.net/secrets/github-actions-pat`).
+#### VMSS bootstrap requirements
 
-#### Runner image bootstrap
+Before the runner pool can deploy successfully:
 
-Before the ACA Job can start, the runner container image must be pushed to the existing central ACR (`nvv54gsk4pteu`) in resource group `mvp-int-env`:
+1. Replace the example `runnerExecutionConfig.adminPublicKey` value in `main.bicepparam` with a real SSH public key for break-glass access.
+2. Configure a GitHub organization or repository `workflow_job` webhook that targets the Function App URL returned in the landing-zone outputs.
 
-```bash
-az acr build --registry <acr-name> --image github-actions-runner:latest ./infra/runner-image
-```
-
-> **Note:** This landing-zone deployment does not change the existing ACR network configuration. Push the runner image using whatever access model that registry already permits.
+The deployment workflow now also packages and zip-deploys the Function App code under `infra\runner-autoscaler\` after the infrastructure deployment succeeds.

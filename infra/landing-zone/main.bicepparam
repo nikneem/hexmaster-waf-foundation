@@ -19,7 +19,7 @@ param hubNetworkConfig = {
     gateway: '10.20.0.0/24'
     sharedServices: '10.20.1.0/24'
     privateEndpoints: '10.20.2.0/24'
-    containerAppsInfrastructure: '10.20.4.0/23'
+    runnerInfrastructure: '10.20.4.0/23'
   }
   reservedAddressPrefixes: {
     futurePlatformDns: '10.20.3.0/24'
@@ -44,11 +44,11 @@ param operatorConnectivityConfig = {
     authenticationMode: 'MicrosoftEntraId'
     operatorGroupName: 'alz-platform-operators'
     emergencyAccessGroupName: 'alz-platform-break-glass'
-    allowedTargetSubnets: [
-      'sharedServices'
-      'privateEndpoints'
-      'containerAppsInfrastructure'
-    ]
+      allowedTargetSubnets: [
+        'sharedServices'
+        'privateEndpoints'
+        'runnerInfrastructure'
+      ]
     spokeReachabilityRequirement: 'Spokes that require operator access must peer to the hub with allowGatewayTransit and useRemoteGateways enabled.'
   }
 }
@@ -68,32 +68,25 @@ param sharedServicesConfig = {
 }
 
 param runnerExecutionConfig = {
-  deployRunnerJob: true
-  imageRepository: 'github-actions-runner'
-  imageTag: 'latest'
-  githubApiUrl: 'https://api.github.com'
+  deployRunnerPool: true
   githubUrl: 'https://github.com/hexmasternl'
-  runnerScope: 'org'
   owner: 'hexmasternl'
   repositories: [
     'hexmaster-waf-foundation'
   ]
   runnerLabels: [
-    'aca-job'
+    'vmss'
   ]
   runnerGroup: 'HexMaster Landingzone'
-  targetWorkflowQueueLength: 1
-  minExecutions: 0
-  maxExecutions: 5
-  pollingInterval: 30
-  replicaTimeout: 1800
-  replicaRetryLimit: 0
-  replicaCompletionCount: 1
-  parallelism: 1
-  cpu: 2
-  memory: '4Gi'
+  runnerVersion: '2.321.0'
+  vmSku: 'Standard_D2as_v5'
+  osDiskSizeGb: 64
+  adminUsername: 'runneradmin'
+  adminPublicKey: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFillInYourPublicKeyBeforeDeployment runneradmin@example'
+  minRunners: 0
+  maxRunners: 10
   githubPatSecretName: 'github-actions-pat'
-  githubPatSecretUri: ''
+  githubWebhookSecretName: 'github-webhook-secret'
   registrationTokenApiUrl: 'https://api.github.com/orgs/hexmasternl/actions/runners/registration-token'
 }
 

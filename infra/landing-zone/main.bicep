@@ -35,7 +35,7 @@ param hubNetworkConfig object = {
     gateway: '10.20.0.0/24'
     sharedServices: '10.20.1.0/24'
     privateEndpoints: '10.20.2.0/24'
-    containerAppsInfrastructure: '10.20.4.0/23'
+    runnerInfrastructure: '10.20.4.0/23'
   }
   reservedAddressPrefixes: {
     futurePlatformDns: '10.20.3.0/24'
@@ -61,11 +61,11 @@ param operatorConnectivityConfig object = {
     authenticationMode: 'MicrosoftEntraId'
     operatorGroupName: 'alz-platform-operators'
     emergencyAccessGroupName: 'alz-platform-break-glass'
-    allowedTargetSubnets: [
-      'sharedServices'
-      'privateEndpoints'
-      'containerAppsInfrastructure'
-    ]
+      allowedTargetSubnets: [
+        'sharedServices'
+        'privateEndpoints'
+        'runnerInfrastructure'
+      ]
     spokeReachabilityRequirement: 'Spokes that require operator access must peer to the hub with allowGatewayTransit and useRemoteGateways enabled.'
   }
 }
@@ -85,34 +85,27 @@ param sharedServicesConfig object = {
   }
 }
 
-@description('Runner execution platform configuration for the shared Container Apps environment and GitHub runner job.')
+@description('Runner execution platform configuration for the dedicated GitHub runner VM scale set and webhook autoscaler.')
 param runnerExecutionConfig object = {
-  deployRunnerJob: false
-  imageRepository: 'github-actions-runner'
-  imageTag: 'latest'
-  githubApiUrl: 'https://api.github.com'
+  deployRunnerPool: false
   githubUrl: 'https://github.com/hexmasternl'
-  runnerScope: 'org'
   owner: 'hexmasternl'
   repositories: [
     'hexmaster-waf-foundation'
   ]
   runnerLabels: [
-    'aca-job'
+    'vmss'
   ]
   runnerGroup: 'HexMaster Landingzone'
-  targetWorkflowQueueLength: 1
-  minExecutions: 0
-  maxExecutions: 5
-  pollingInterval: 30
-  replicaTimeout: 1800
-  replicaRetryLimit: 0
-  replicaCompletionCount: 1
-  parallelism: 1
-  cpu: 2
-  memory: '4Gi'
+  runnerVersion: '2.321.0'
+  vmSku: 'Standard_D2as_v5'
+  osDiskSizeGb: 64
+  adminUsername: 'runneradmin'
+  adminPublicKey: ''
+  minRunners: 0
+  maxRunners: 10
   githubPatSecretName: 'github-actions-pat'
-  githubPatSecretUri: ''
+  githubWebhookSecretName: 'github-webhook-secret'
   registrationTokenApiUrl: 'https://api.github.com/orgs/hexmasternl/actions/runners/registration-token'
 }
 
@@ -131,19 +124,19 @@ var requiredTags = union({
 }, tags)
 var connectivityResourceGroupName = 'rg-${prefix}-connectivity-${locationToken}'
 var platformResourceGroupName = 'rg-${prefix}-platform-${locationToken}'
+var runnerResourceGroupName = 'rg-${prefix}-runners-${locationToken}'
 var hubVnetName = 'vnet-${prefix}-hub-${locationToken}'
 var sharedServicesSubnetName = 'snet-${prefix}-shared-services'
 var privateEndpointsSubnetName = 'snet-${prefix}-private-endpoints'
 var runnerInfrastructureSubnetName = 'snet-${prefix}-runners'
 var vpnGatewayPublicIpName = 'pip-${prefix}-vpn-az-${locationToken}'
 var vpnGatewayName = 'vpngw-${prefix}-${locationToken}'
-var containerAppsEnvironmentName = 'cae-${prefix}-${locationToken}'
 var containerRegistryName = 'nvv54gsk4pteu'
 var containerRegistryResourceGroupName = 'mvp-int-env'
 var platformKeyVaultName = take('kv-${prefix}-${locationToken}', 24)
-var runnerJobName = 'job-${prefix}-github'
+var runnerScaleSetName = 'vmss-${prefix}-github'
 var runnerExecutionIdentityName = 'id-${prefix}-runner-exec'
-var runnerRegistryIdentityName = 'id-${prefix}-runner-reg'
+var runnerAutoscalerFunctionAppName = take('func-${prefix}-runner-${locationToken}', 60)
 var workloadSpokeDefinitions = [for spoke in workloadSpokes: {
   name: spoke.name
   token: toLower(replace(replace(spoke.name, ' ', '-'), '_', '-'))
@@ -165,6 +158,14 @@ resource platformResourceGroup 'Microsoft.Resources/resourceGroups@2024-11-01' =
   tags: requiredTags
 }
 
+resource runnerResourceGroup 'Microsoft.Resources/resourceGroups@2024-11-01' = {
+  name: runnerResourceGroupName
+  location: primaryLocation
+  tags: union(requiredTags, {
+    'alz:lifecycle': 'runner-platform'
+  })
+}
+
 module hubNetwork '../modules/connectivity/hub-network.bicep' = {
   name: 'hub-network-foundation'
   scope: connectivityResourceGroup
@@ -172,13 +173,13 @@ module hubNetwork '../modules/connectivity/hub-network.bicep' = {
     location: primaryLocation
     tags: requiredTags
     vnetName: hubVnetName
-    subnetNames: {
-      sharedServices: sharedServicesSubnetName
-      privateEndpoints: privateEndpointsSubnetName
-      containerAppsInfrastructure: runnerInfrastructureSubnetName
-    }
-    hubNetworkConfig: hubNetworkConfig
-    vpnClientAddressPool: operatorConnectivityConfig.vpnClientAddressPool
+      subnetNames: {
+        sharedServices: sharedServicesSubnetName
+        privateEndpoints: privateEndpointsSubnetName
+        runnerInfrastructure: runnerInfrastructureSubnetName
+      }
+      hubNetworkConfig: hubNetworkConfig
+      vpnClientAddressPool: operatorConnectivityConfig.vpnClientAddressPool
   }
 }
 
@@ -286,18 +287,16 @@ module sharedServices '../modules/platform/shared-services.bicep' = {
 
 module runnerExecution '../modules/platform/runner-execution.bicep' = {
   name: 'runner-execution-platform'
-  scope: platformResourceGroup
+  scope: runnerResourceGroup
   params: {
     location: primaryLocation
     tags: requiredTags
-    containerAppsEnvironmentName: containerAppsEnvironmentName
-    runnerJobName: runnerJobName
+    runnerScaleSetName: runnerScaleSetName
     runnerExecutionIdentityName: runnerExecutionIdentityName
-    runnerRegistryIdentityName: runnerRegistryIdentityName
-    containerRegistryName: containerRegistryName
-    containerRegistryResourceGroupName: containerRegistryResourceGroupName
+    runnerAutoscalerFunctionAppName: runnerAutoscalerFunctionAppName
     keyVaultName: platformKeyVaultName
-    infrastructureSubnetId: hubNetwork.outputs.foundation.subnetIds.containerAppsInfrastructure
+    keyVaultResourceGroupName: platformResourceGroupName
+    infrastructureSubnetId: hubNetwork.outputs.foundation.subnetIds.runnerInfrastructure
     runnerExecutionConfig: runnerExecutionConfig
   }
   dependsOn: [
@@ -305,12 +304,23 @@ module runnerExecution '../modules/platform/runner-execution.bicep' = {
   ]
 }
 
-module runnerRegistryAccess '../modules/platform/acr-pull-assignment.bicep' = {
-  name: 'runner-registry-access'
-  scope: resourceGroup(containerRegistryResourceGroupName)
+module runnerExecutionKeyVaultAssignment '../modules/platform/key-vault-secret-reader-assignment.bicep' = if (runnerExecutionConfig.deployRunnerPool && !empty(runnerExecutionConfig.adminPublicKey)) {
+  name: 'runner-execution-key-vault-assignment'
+  scope: platformResourceGroup
   params: {
-    containerRegistryName: containerRegistryName
-    principalId: runnerExecution.outputs.runnerPlatform.identities.registryPull.principalId
+    keyVaultName: platformKeyVaultName
+    principalId: runnerExecution.outputs.runnerPlatform.identities.execution.principalId
+    roleAssignmentGuid: guid(platformKeyVaultName, runnerExecutionIdentityName, 'runner-key-vault-secrets-user')
+  }
+}
+
+module runnerAutoscalerKeyVaultAssignment '../modules/platform/key-vault-secret-reader-assignment.bicep' = if (runnerExecutionConfig.deployRunnerPool && !empty(runnerExecutionConfig.adminPublicKey)) {
+  name: 'runner-autoscaler-key-vault-assignment'
+  scope: platformResourceGroup
+  params: {
+    keyVaultName: platformKeyVaultName
+    principalId: runnerExecution.outputs.runnerPlatform.autoscaler.functionApp.principalId
+    roleAssignmentGuid: guid(platformKeyVaultName, runnerAutoscalerFunctionAppName, 'runner-autoscaler-key-vault-secrets-user')
   }
 }
 

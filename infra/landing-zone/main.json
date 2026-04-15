@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.39.26.7824",
-      "templateHash": "11901479519475769509"
+      "templateHash": "710168946444165529"
     }
   },
   "parameters": {
@@ -65,7 +65,7 @@
           "gateway": "10.20.0.0/24",
           "sharedServices": "10.20.1.0/24",
           "privateEndpoints": "10.20.2.0/24",
-          "containerAppsInfrastructure": "10.20.4.0/23"
+          "runnerInfrastructure": "10.20.4.0/23"
         },
         "reservedAddressPrefixes": {
           "futurePlatformDns": "10.20.3.0/24",
@@ -98,7 +98,7 @@
           "allowedTargetSubnets": [
             "sharedServices",
             "privateEndpoints",
-            "containerAppsInfrastructure"
+            "runnerInfrastructure"
           ],
           "spokeReachabilityRequirement": "Spokes that require operator access must peer to the hub with allowGatewayTransit and useRemoteGateways enabled."
         }
@@ -129,36 +129,29 @@
     "runnerExecutionConfig": {
       "type": "object",
       "defaultValue": {
-        "deployRunnerJob": false,
-        "imageRepository": "github-actions-runner",
-        "imageTag": "latest",
-        "githubApiUrl": "https://api.github.com",
+        "deployRunnerPool": false,
         "githubUrl": "https://github.com/hexmasternl",
-        "runnerScope": "org",
         "owner": "hexmasternl",
         "repositories": [
           "hexmaster-waf-foundation"
         ],
         "runnerLabels": [
-          "aca-job"
+          "vmss"
         ],
         "runnerGroup": "HexMaster Landingzone",
-        "targetWorkflowQueueLength": 1,
-        "minExecutions": 0,
-        "maxExecutions": 5,
-        "pollingInterval": 30,
-        "replicaTimeout": 1800,
-        "replicaRetryLimit": 0,
-        "replicaCompletionCount": 1,
-        "parallelism": 1,
-        "cpu": 2,
-        "memory": "4Gi",
+        "runnerVersion": "2.321.0",
+        "vmSku": "Standard_D2as_v5",
+        "osDiskSizeGb": 64,
+        "adminUsername": "runneradmin",
+        "adminPublicKey": "",
+        "minRunners": 0,
+        "maxRunners": 10,
         "githubPatSecretName": "github-actions-pat",
-        "githubPatSecretUri": "",
+        "githubWebhookSecretName": "github-webhook-secret",
         "registrationTokenApiUrl": "https://api.github.com/orgs/hexmasternl/actions/runners/registration-token"
       },
       "metadata": {
-        "description": "Runner execution platform configuration for the shared Container Apps environment and GitHub runner job."
+        "description": "Runner execution platform configuration for the dedicated GitHub runner VM scale set and webhook autoscaler."
       }
     },
     "workloadSpokes": {
@@ -216,19 +209,19 @@
     "requiredTags": "[union(createObject('alz:landingZone', parameters('landingZoneName'), 'alz:environment', parameters('environment'), 'alz:owner', parameters('platformOwner'), 'alz:costCenter', parameters('platformCostCenter'), 'alz:lifecycle', 'shared-platform', 'alz:managedBy', 'bicep'), parameters('tags'))]",
     "connectivityResourceGroupName": "[format('rg-{0}-connectivity-{1}', variables('prefix'), variables('locationToken'))]",
     "platformResourceGroupName": "[format('rg-{0}-platform-{1}', variables('prefix'), variables('locationToken'))]",
+    "runnerResourceGroupName": "[format('rg-{0}-runners-{1}', variables('prefix'), variables('locationToken'))]",
     "hubVnetName": "[format('vnet-{0}-hub-{1}', variables('prefix'), variables('locationToken'))]",
     "sharedServicesSubnetName": "[format('snet-{0}-shared-services', variables('prefix'))]",
     "privateEndpointsSubnetName": "[format('snet-{0}-private-endpoints', variables('prefix'))]",
     "runnerInfrastructureSubnetName": "[format('snet-{0}-runners', variables('prefix'))]",
     "vpnGatewayPublicIpName": "[format('pip-{0}-vpn-az-{1}', variables('prefix'), variables('locationToken'))]",
     "vpnGatewayName": "[format('vpngw-{0}-{1}', variables('prefix'), variables('locationToken'))]",
-    "containerAppsEnvironmentName": "[format('cae-{0}-{1}', variables('prefix'), variables('locationToken'))]",
     "containerRegistryName": "nvv54gsk4pteu",
     "containerRegistryResourceGroupName": "mvp-int-env",
     "platformKeyVaultName": "[take(format('kv-{0}-{1}', variables('prefix'), variables('locationToken')), 24)]",
-    "runnerJobName": "[format('job-{0}-github', variables('prefix'))]",
+    "runnerScaleSetName": "[format('vmss-{0}-github', variables('prefix'))]",
     "runnerExecutionIdentityName": "[format('id-{0}-runner-exec', variables('prefix'))]",
-    "runnerRegistryIdentityName": "[format('id-{0}-runner-reg', variables('prefix'))]"
+    "runnerAutoscalerFunctionAppName": "[take(format('func-{0}-runner-{1}', variables('prefix'), variables('locationToken')), 60)]"
   },
   "resources": [
     {
@@ -244,6 +237,13 @@
       "name": "[variables('platformResourceGroupName')]",
       "location": "[parameters('primaryLocation')]",
       "tags": "[variables('requiredTags')]"
+    },
+    {
+      "type": "Microsoft.Resources/resourceGroups",
+      "apiVersion": "2024-11-01",
+      "name": "[variables('runnerResourceGroupName')]",
+      "location": "[parameters('primaryLocation')]",
+      "tags": "[union(variables('requiredTags'), createObject('alz:lifecycle', 'runner-platform'))]"
     },
     {
       "copy": {
@@ -280,7 +280,7 @@
             "value": {
               "sharedServices": "[variables('sharedServicesSubnetName')]",
               "privateEndpoints": "[variables('privateEndpointsSubnetName')]",
-              "containerAppsInfrastructure": "[variables('runnerInfrastructureSubnetName')]"
+              "runnerInfrastructure": "[variables('runnerInfrastructureSubnetName')]"
             }
           },
           "hubNetworkConfig": {
@@ -297,7 +297,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.39.26.7824",
-              "templateHash": "6191015223731200631"
+              "templateHash": "7367136346338415509"
             }
           },
           "parameters": {
@@ -424,20 +424,20 @@
             {
               "type": "Microsoft.Network/networkSecurityGroups",
               "apiVersion": "2024-05-01",
-              "name": "[format('nsg-{0}', parameters('subnetNames').containerAppsInfrastructure)]",
+              "name": "[format('nsg-{0}', parameters('subnetNames').runnerInfrastructure)]",
               "location": "[parameters('location')]",
               "tags": "[parameters('tags')]",
               "properties": {
                 "securityRules": [
                   {
-                    "name": "AllowOperatorP2SControlPlaneInbound",
+                    "name": "AllowOperatorP2SInbound",
                     "properties": {
-                      "description": "Allows break-glass operators to reach internal HTTPS endpoints exposed through the Container Apps environment.",
+                      "description": "Allows break-glass operators to reach runner VMs over SSH.",
                       "protocol": "Tcp",
                       "sourcePortRange": "*",
-                      "destinationPortRange": "443",
+                      "destinationPortRange": "22",
                       "sourceAddressPrefix": "[parameters('vpnClientAddressPool')]",
-                      "destinationAddressPrefix": "[variables('subnetPrefixes').containerAppsInfrastructure]",
+                      "destinationAddressPrefix": "[variables('subnetPrefixes').runnerInfrastructure]",
                       "access": "Allow",
                       "priority": 100,
                       "direction": "Inbound"
@@ -485,13 +485,47 @@
             {
               "type": "Microsoft.Network/routeTables",
               "apiVersion": "2024-05-01",
-              "name": "[format('rt-{0}', parameters('subnetNames').containerAppsInfrastructure)]",
+              "name": "[format('rt-{0}', parameters('subnetNames').runnerInfrastructure)]",
               "location": "[parameters('location')]",
               "tags": "[parameters('tags')]",
               "properties": {
                 "disableBgpRoutePropagation": false,
                 "routes": []
               }
+            },
+            {
+              "type": "Microsoft.Network/publicIPAddresses",
+              "apiVersion": "2024-05-01",
+              "name": "[format('pip-{0}-nat', parameters('subnetNames').runnerInfrastructure)]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "sku": {
+                "name": "Standard"
+              },
+              "properties": {
+                "publicIPAllocationMethod": "Static"
+              }
+            },
+            {
+              "type": "Microsoft.Network/natGateways",
+              "apiVersion": "2024-05-01",
+              "name": "[format('nat-{0}', parameters('subnetNames').runnerInfrastructure)]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "sku": {
+                "name": "Standard"
+              },
+              "properties": {
+                "publicIpAddresses": [
+                  {
+                    "id": "[resourceId('Microsoft.Network/publicIPAddresses', format('pip-{0}-nat', parameters('subnetNames').runnerInfrastructure))]"
+                  }
+                ],
+                "idleTimeoutInMinutes": 10
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Network/publicIPAddresses', format('pip-{0}-nat', parameters('subnetNames').runnerInfrastructure))]"
+              ]
             },
             {
               "type": "Microsoft.Network/virtualNetworks",
@@ -540,32 +574,28 @@
                     }
                   },
                   {
-                    "name": "[parameters('subnetNames').containerAppsInfrastructure]",
+                    "name": "[parameters('subnetNames').runnerInfrastructure]",
                     "properties": {
-                      "addressPrefix": "[variables('subnetPrefixes').containerAppsInfrastructure]",
+                      "addressPrefix": "[variables('subnetPrefixes').runnerInfrastructure]",
                       "networkSecurityGroup": {
-                        "id": "[resourceId('Microsoft.Network/networkSecurityGroups', format('nsg-{0}', parameters('subnetNames').containerAppsInfrastructure))]"
+                        "id": "[resourceId('Microsoft.Network/networkSecurityGroups', format('nsg-{0}', parameters('subnetNames').runnerInfrastructure))]"
                       },
                       "routeTable": {
-                        "id": "[resourceId('Microsoft.Network/routeTables', format('rt-{0}', parameters('subnetNames').containerAppsInfrastructure))]"
+                        "id": "[resourceId('Microsoft.Network/routeTables', format('rt-{0}', parameters('subnetNames').runnerInfrastructure))]"
                       },
-                      "delegations": [
-                        {
-                          "name": "acaEnvironmentDelegation",
-                          "properties": {
-                            "serviceName": "Microsoft.App/environments"
-                          }
-                        }
-                      ]
+                      "natGateway": {
+                        "id": "[resourceId('Microsoft.Network/natGateways', format('nat-{0}', parameters('subnetNames').runnerInfrastructure))]"
+                      }
                     }
                   }
                 ]
               },
               "dependsOn": [
-                "[resourceId('Microsoft.Network/networkSecurityGroups', format('nsg-{0}', parameters('subnetNames').containerAppsInfrastructure))]",
-                "[resourceId('Microsoft.Network/routeTables', format('rt-{0}', parameters('subnetNames').containerAppsInfrastructure))]",
                 "[resourceId('Microsoft.Network/networkSecurityGroups', format('nsg-{0}', parameters('subnetNames').privateEndpoints))]",
                 "[resourceId('Microsoft.Network/routeTables', format('rt-{0}', parameters('subnetNames').privateEndpoints))]",
+                "[resourceId('Microsoft.Network/networkSecurityGroups', format('nsg-{0}', parameters('subnetNames').runnerInfrastructure))]",
+                "[resourceId('Microsoft.Network/routeTables', format('rt-{0}', parameters('subnetNames').runnerInfrastructure))]",
+                "[resourceId('Microsoft.Network/natGateways', format('nat-{0}', parameters('subnetNames').runnerInfrastructure))]",
                 "[resourceId('Microsoft.Network/networkSecurityGroups', format('nsg-{0}', parameters('subnetNames').sharedServices))]",
                 "[resourceId('Microsoft.Network/routeTables', format('rt-{0}', parameters('subnetNames').sharedServices))]"
               ]
@@ -581,17 +611,21 @@
                   "gateway": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('vnetName'), 'GatewaySubnet')]",
                   "sharedServices": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('vnetName'), parameters('subnetNames').sharedServices)]",
                   "privateEndpoints": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('vnetName'), parameters('subnetNames').privateEndpoints)]",
-                  "containerAppsInfrastructure": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('vnetName'), parameters('subnetNames').containerAppsInfrastructure)]"
+                  "runnerInfrastructure": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('vnetName'), parameters('subnetNames').runnerInfrastructure)]"
                 },
                 "routeTables": {
                   "sharedServices": "[resourceId('Microsoft.Network/routeTables', format('rt-{0}', parameters('subnetNames').sharedServices))]",
                   "privateEndpoints": "[resourceId('Microsoft.Network/routeTables', format('rt-{0}', parameters('subnetNames').privateEndpoints))]",
-                  "containerAppsInfrastructure": "[resourceId('Microsoft.Network/routeTables', format('rt-{0}', parameters('subnetNames').containerAppsInfrastructure))]"
+                  "runnerInfrastructure": "[resourceId('Microsoft.Network/routeTables', format('rt-{0}', parameters('subnetNames').runnerInfrastructure))]"
                 },
                 "networkSecurityGroups": {
                   "sharedServices": "[resourceId('Microsoft.Network/networkSecurityGroups', format('nsg-{0}', parameters('subnetNames').sharedServices))]",
                   "privateEndpoints": "[resourceId('Microsoft.Network/networkSecurityGroups', format('nsg-{0}', parameters('subnetNames').privateEndpoints))]",
-                  "containerAppsInfrastructure": "[resourceId('Microsoft.Network/networkSecurityGroups', format('nsg-{0}', parameters('subnetNames').containerAppsInfrastructure))]"
+                  "runnerInfrastructure": "[resourceId('Microsoft.Network/networkSecurityGroups', format('nsg-{0}', parameters('subnetNames').runnerInfrastructure))]"
+                },
+                "natGateway": {
+                  "id": "[resourceId('Microsoft.Network/natGateways', format('nat-{0}', parameters('subnetNames').runnerInfrastructure))]",
+                  "publicIpAddressId": "[resourceId('Microsoft.Network/publicIPAddresses', format('pip-{0}-nat', parameters('subnetNames').runnerInfrastructure))]"
                 },
                 "addressPlan": {
                   "hubAddressPrefixes": "[parameters('hubNetworkConfig').addressPrefixes]",
@@ -600,7 +634,7 @@
                   "futureSpokeSupernet": "[parameters('hubNetworkConfig').futureSpokeSupernet]",
                   "notes": [
                     "The hub is reserved for platform connectivity, shared services, and runner infrastructure.",
-                    "The Container Apps infrastructure subnet is pre-sized to avoid later subnet replacement.",
+                    "The runner subnet is dedicated to the VM scale set and keeps runner compute separate from shared services and operators.",
                     "The future spoke supernet is intentionally separate from the hub VNet to keep peering straightforward."
                   ]
                 },
@@ -1720,7 +1754,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.39.26.7824",
-              "templateHash": "5384636369762801612"
+              "templateHash": "2232553344403147172"
             }
           },
           "parameters": {
@@ -1910,7 +1944,7 @@
                     "Runner jobs pull images from the central registry with a dedicated managed identity.",
                     "This template assumes the ACR already exists in a separate resource group and does not modify its network configuration.",
                     "Future workload spokes consume shared images using the existing registry access model rather than landing-zone-managed private endpoints.",
-                    "Enable ACR ARM-audience authentication before first runner image pull so Container Apps managed identities can authenticate without admin credentials."
+                    "Enable ACR ARM-audience authentication before first managed-identity image pull so Azure-hosted runner or workload compute can authenticate without admin credentials."
                   ]
                 },
                 "secretVault": {
@@ -1939,7 +1973,7 @@
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
       "name": "runner-execution-platform",
-      "resourceGroup": "[variables('platformResourceGroupName')]",
+      "resourceGroup": "[variables('runnerResourceGroupName')]",
       "properties": {
         "expressionEvaluationOptions": {
           "scope": "inner"
@@ -1952,29 +1986,23 @@
           "tags": {
             "value": "[variables('requiredTags')]"
           },
-          "containerAppsEnvironmentName": {
-            "value": "[variables('containerAppsEnvironmentName')]"
-          },
-          "runnerJobName": {
-            "value": "[variables('runnerJobName')]"
+          "runnerScaleSetName": {
+            "value": "[variables('runnerScaleSetName')]"
           },
           "runnerExecutionIdentityName": {
             "value": "[variables('runnerExecutionIdentityName')]"
           },
-          "runnerRegistryIdentityName": {
-            "value": "[variables('runnerRegistryIdentityName')]"
-          },
-          "containerRegistryName": {
-            "value": "[variables('containerRegistryName')]"
-          },
-          "containerRegistryResourceGroupName": {
-            "value": "[variables('containerRegistryResourceGroupName')]"
+          "runnerAutoscalerFunctionAppName": {
+            "value": "[variables('runnerAutoscalerFunctionAppName')]"
           },
           "keyVaultName": {
             "value": "[variables('platformKeyVaultName')]"
           },
+          "keyVaultResourceGroupName": {
+            "value": "[variables('platformResourceGroupName')]"
+          },
           "infrastructureSubnetId": {
-            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('connectivityResourceGroupName')), 'Microsoft.Resources/deployments', 'hub-network-foundation'), '2025-04-01').outputs.foundation.value.subnetIds.containerAppsInfrastructure]"
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('connectivityResourceGroupName')), 'Microsoft.Resources/deployments', 'hub-network-foundation'), '2025-04-01').outputs.foundation.value.subnetIds.runnerInfrastructure]"
           },
           "runnerExecutionConfig": {
             "value": "[parameters('runnerExecutionConfig')]"
@@ -1987,7 +2015,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.39.26.7824",
-              "templateHash": "13202404146364596579"
+              "templateHash": "11170235969955279863"
             }
           },
           "parameters": {
@@ -2004,103 +2032,89 @@
                 "description": "Tags applied to runner platform resources."
               }
             },
-            "containerAppsEnvironmentName": {
+            "runnerScaleSetName": {
               "type": "string",
               "metadata": {
-                "description": "Name of the Container Apps managed environment hosting runner jobs."
-              }
-            },
-            "runnerJobName": {
-              "type": "string",
-              "metadata": {
-                "description": "Name of the GitHub Actions runner job definition."
+                "description": "Name of the GitHub Actions runner VM scale set."
               }
             },
             "runnerExecutionIdentityName": {
               "type": "string",
               "metadata": {
-                "description": "Name of the runner execution identity used inside the job."
+                "description": "Name of the runner execution identity used by the VM scale set."
               }
             },
-            "runnerRegistryIdentityName": {
+            "runnerAutoscalerFunctionAppName": {
               "type": "string",
               "metadata": {
-                "description": "Name of the runner registry identity used for ACR pulls."
-              }
-            },
-            "containerRegistryName": {
-              "type": "string",
-              "metadata": {
-                "description": "Name of the central Azure Container Registry."
-              }
-            },
-            "containerRegistryResourceGroupName": {
-              "type": "string",
-              "metadata": {
-                "description": "Resource group containing the existing central Azure Container Registry."
+                "description": "Name of the autoscaler Function App."
               }
             },
             "keyVaultName": {
               "type": "string",
               "metadata": {
-                "description": "Name of the shared platform Key Vault in this resource group."
+                "description": "Name of the existing shared platform Key Vault."
+              }
+            },
+            "keyVaultResourceGroupName": {
+              "type": "string",
+              "metadata": {
+                "description": "Resource group containing the shared platform Key Vault."
               }
             },
             "infrastructureSubnetId": {
               "type": "string",
               "metadata": {
-                "description": "Subnet resource ID delegated to the Container Apps environment."
+                "description": "Subnet resource ID used by the runner VM scale set."
               }
             },
             "runnerExecutionConfig": {
               "type": "object",
               "defaultValue": {
-                "deployRunnerJob": false,
-                "imageRepository": "github-actions-runner",
-                "imageTag": "latest",
-                "githubApiUrl": "https://api.github.com",
+                "deployRunnerPool": false,
                 "githubUrl": "https://github.com/hexmasternl",
-                "runnerScope": "org",
                 "owner": "hexmasternl",
                 "repositories": [
                   "hexmaster-waf-foundation"
                 ],
                 "runnerLabels": [
-                  "aca-job"
+                  "vmss"
                 ],
                 "runnerGroup": "HexMaster Landingzone",
-                "targetWorkflowQueueLength": 1,
-                "minExecutions": 0,
-                "maxExecutions": 5,
-                "pollingInterval": 30,
-                "replicaTimeout": 1800,
-                "replicaRetryLimit": 0,
-                "replicaCompletionCount": 1,
-                "parallelism": 1,
-                "cpu": 2,
-                "memory": "4Gi",
+                "runnerVersion": "2.321.0",
+                "vmSku": "Standard_D2as_v5",
+                "osDiskSizeGb": 64,
+                "adminUsername": "runneradmin",
+                "adminPublicKey": "",
+                "minRunners": 0,
+                "maxRunners": 10,
                 "githubPatSecretName": "github-actions-pat",
-                "githubPatSecretUri": "",
+                "githubWebhookSecretName": "github-webhook-secret",
                 "registrationTokenApiUrl": "https://api.github.com/orgs/hexmasternl/actions/runners/registration-token"
               },
               "metadata": {
-                "description": "Runner execution configuration for the Container Apps environment and GitHub runner job."
+                "description": "Runner execution configuration for the VM scale set and webhook autoscaler."
               }
             }
           },
           "variables": {
-            "keyVaultSecretsUserRoleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-408a-b874-0445c86b69e6')]",
-            "deployRunnerJob": "[and(and(and(parameters('runnerExecutionConfig').deployRunnerJob, not(empty(parameters('runnerExecutionConfig').githubUrl))), not(empty(parameters('runnerExecutionConfig').registrationTokenApiUrl))), not(empty(parameters('runnerExecutionConfig').githubPatSecretUri)))]"
+            "copy": [
+              {
+                "name": "targetRepositories",
+                "count": "[length(parameters('runnerExecutionConfig').repositories)]",
+                "input": "[format('{0}/{1}', parameters('runnerExecutionConfig').owner, parameters('runnerExecutionConfig').repositories[copyIndex('targetRepositories')])]"
+              }
+            ],
+            "virtualMachineContributorRoleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '9980e02c-c2be-4d73-94e8-173b1dc7cf3c')]",
+            "deployRunnerPool": "[and(parameters('runnerExecutionConfig').deployRunnerPool, not(empty(parameters('runnerExecutionConfig').adminPublicKey)))]",
+            "functionPlanName": "[format('plan-{0}', take(replace(parameters('runnerAutoscalerFunctionAppName'), '_', '-'), 36))]",
+            "storageAccountName": "[toLower(take(format('st{0}', uniqueString(resourceGroup().id, parameters('runnerAutoscalerFunctionAppName'))), 24))]",
+            "targetRepositoriesCsv": "[join(variables('targetRepositories'), ',')]",
+            "cloudInitTemplate": "#cloud-config\r\npackage_update: true\r\npackage_upgrade: false\r\npackages:\r\n  - ca-certificates\r\n  - curl\r\n  - docker.io\r\n  - git\r\n  - jq\r\n  - libicu70\r\n  - libssl3\r\n  - unzip\r\n  - zip\r\n\r\nusers:\r\n  - default\r\n  - name: runner\r\n    groups:\r\n      - docker\r\n    shell: /bin/bash\r\n    sudo: ALL=(ALL) NOPASSWD:ALL\r\n\r\nwrite_files:\r\n  - path: /opt/github-runner/start-runner.sh\r\n    permissions: '0755'\r\n    owner: root:root\r\n    content: |\r\n      #!/bin/bash\r\n      set -euo pipefail\r\n\r\n      RUNNER_HOME=\"/home/runner/actions-runner\"\r\n      RUNNER_VERSION=\"__RUNNER_VERSION__\"\r\n      GITHUB_URL=\"__GITHUB_URL__\"\r\n      RUNNER_GROUP=\"__RUNNER_GROUP__\"\r\n      RUNNER_LABELS=\"__RUNNER_LABELS__\"\r\n      KEY_VAULT_URI=\"__KEY_VAULT_URI__\"\r\n      GITHUB_PAT_SECRET_NAME=\"__GITHUB_PAT_SECRET_NAME__\"\r\n      REGISTRATION_TOKEN_API_URL=\"__REGISTRATION_TOKEN_API_URL__\"\r\n\r\n      mkdir -p \"$RUNNER_HOME\"\r\n      chown -R runner:runner \"$RUNNER_HOME\"\r\n\r\n      if [ ! -f \"$RUNNER_HOME/config.sh\" ]; then\r\n        archive_name=\"actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz\"\r\n        runner_url=\"https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/${archive_name}\"\r\n        su - runner -c \"cd \\\"$RUNNER_HOME\\\" && curl -fsSL \\\"$runner_url\\\" -o \\\"$archive_name\\\" && tar xzf \\\"$archive_name\\\" && rm -f \\\"$archive_name\\\"\"\r\n        bash \"$RUNNER_HOME/bin/installdependencies.sh\"\r\n      fi\r\n\r\n      token_response=$(curl -fsSL -H Metadata:true \"http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https://vault.azure.net\")\r\n      key_vault_token=$(echo \"$token_response\" | jq -r '.access_token')\r\n      github_pat=$(curl -fsSL -H \"Authorization: Bearer ${key_vault_token}\" \"${KEY_VAULT_URI}secrets/${GITHUB_PAT_SECRET_NAME}?api-version=7.4\" | jq -r '.value')\r\n\r\n      if [ -z \"$github_pat\" ] || [ \"$github_pat\" = \"null\" ]; then\r\n        echo \"Failed to resolve GitHub PAT from Key Vault.\"\r\n        exit 1\r\n      fi\r\n\r\n      registration_token=$(curl -fsSL -X POST \\\r\n        -H \"Authorization: token ${github_pat}\" \\\r\n        -H \"Accept: application/vnd.github+json\" \\\r\n        \"${REGISTRATION_TOKEN_API_URL}\" | jq -r '.token')\r\n\r\n      if [ -z \"$registration_token\" ] || [ \"$registration_token\" = \"null\" ]; then\r\n        echo \"Failed to obtain a GitHub runner registration token.\"\r\n        exit 1\r\n      fi\r\n\r\n      rm -f \\\r\n        \"$RUNNER_HOME/.runner\" \\\r\n        \"$RUNNER_HOME/.credentials\" \\\r\n        \"$RUNNER_HOME/.credentials_rsaparams\" \\\r\n        \"$RUNNER_HOME/.env\"\r\n\r\n      su - runner -c \"cd \\\"$RUNNER_HOME\\\" && ./config.sh --url \\\"$GITHUB_URL\\\" --token \\\"$registration_token\\\" --runnergroup \\\"$RUNNER_GROUP\\\" --labels \\\"$RUNNER_LABELS\\\" --name \\\"vmss-$(hostname)\\\" --work _work --unattended --ephemeral --replace\"\r\n      exec su - runner -c \"cd \\\"$RUNNER_HOME\\\" && ./run.sh\"\r\n\r\n  - path: /etc/systemd/system/github-runner.service\r\n    permissions: '0644'\r\n    owner: root:root\r\n    content: |\r\n      [Unit]\r\n      Description=GitHub Actions VMSS runner\r\n      Wants=network-online.target docker.service\r\n      After=network-online.target docker.service\r\n\r\n      [Service]\r\n      Type=simple\r\n      ExecStart=/opt/github-runner/start-runner.sh\r\n      Restart=always\r\n      RestartSec=10\r\n\r\n      [Install]\r\n      WantedBy=multi-user.target\r\n\r\nruncmd:\r\n  - systemctl enable --now docker\r\n  - systemctl daemon-reload\r\n  - systemctl enable --now github-runner.service\r\n"
           },
           "resources": [
             {
-              "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
-              "apiVersion": "2024-11-30",
-              "name": "[parameters('runnerRegistryIdentityName')]",
-              "location": "[parameters('location')]",
-              "tags": "[parameters('tags')]"
-            },
-            {
+              "condition": "[variables('deployRunnerPool')]",
               "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
               "apiVersion": "2024-11-30",
               "name": "[parameters('runnerExecutionIdentityName')]",
@@ -2108,134 +2122,217 @@
               "tags": "[parameters('tags')]"
             },
             {
-              "type": "Microsoft.App/managedEnvironments",
-              "apiVersion": "2025-01-01",
-              "name": "[parameters('containerAppsEnvironmentName')]",
+              "condition": "[variables('deployRunnerPool')]",
+              "type": "Microsoft.Compute/virtualMachineScaleSets",
+              "apiVersion": "2024-11-01",
+              "name": "[parameters('runnerScaleSetName')]",
               "location": "[parameters('location')]",
               "tags": "[parameters('tags')]",
-              "properties": {
-                "vnetConfiguration": {
-                  "infrastructureSubnetId": "[parameters('infrastructureSubnetId')]",
-                  "internal": true
+              "sku": {
+                "name": "[parameters('runnerExecutionConfig').vmSku]",
+                "tier": "Standard",
+                "capacity": "[parameters('runnerExecutionConfig').minRunners]"
+              },
+              "identity": {
+                "type": "UserAssigned",
+                "userAssignedIdentities": {
+                  "[format('{0}', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('runnerExecutionIdentityName')))]": {}
                 }
-              }
-            },
-            {
-              "type": "Microsoft.Authorization/roleAssignments",
-              "apiVersion": "2022-04-01",
-              "scope": "[format('Microsoft.KeyVault/vaults/{0}', parameters('keyVaultName'))]",
-              "name": "[guid(resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('runnerExecutionIdentityName')), 'runner-key-vault-secrets-user')]",
+              },
               "properties": {
-                "roleDefinitionId": "[variables('keyVaultSecretsUserRoleDefinitionId')]",
-                "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('runnerExecutionIdentityName')), '2024-11-30').principalId]",
-                "principalType": "ServicePrincipal"
+                "overprovision": false,
+                "upgradePolicy": {
+                  "mode": "Manual"
+                },
+                "virtualMachineProfile": {
+                  "storageProfile": {
+                    "imageReference": {
+                      "publisher": "Canonical",
+                      "offer": "0001-com-ubuntu-server-jammy",
+                      "sku": "22_04-lts-gen2",
+                      "version": "latest"
+                    },
+                    "osDisk": {
+                      "createOption": "FromImage",
+                      "caching": "ReadWrite",
+                      "diskSizeGB": "[parameters('runnerExecutionConfig').osDiskSizeGb]",
+                      "managedDisk": {
+                        "storageAccountType": "StandardSSD_LRS"
+                      }
+                    }
+                  },
+                  "osProfile": {
+                    "computerNamePrefix": "[take(parameters('runnerScaleSetName'), 9)]",
+                    "adminUsername": "[parameters('runnerExecutionConfig').adminUsername]",
+                    "customData": "[base64(replace(replace(replace(replace(replace(replace(replace(variables('cloudInitTemplate'), '__RUNNER_VERSION__', parameters('runnerExecutionConfig').runnerVersion), '__GITHUB_URL__', parameters('runnerExecutionConfig').githubUrl), '__RUNNER_GROUP__', parameters('runnerExecutionConfig').runnerGroup), '__RUNNER_LABELS__', join(parameters('runnerExecutionConfig').runnerLabels, ',')), '__KEY_VAULT_URI__', reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('keyVaultResourceGroupName')), 'Microsoft.KeyVault/vaults', parameters('keyVaultName')), '2024-11-01').vaultUri), '__GITHUB_PAT_SECRET_NAME__', parameters('runnerExecutionConfig').githubPatSecretName), '__REGISTRATION_TOKEN_API_URL__', parameters('runnerExecutionConfig').registrationTokenApiUrl))]",
+                    "linuxConfiguration": {
+                      "disablePasswordAuthentication": true,
+                      "provisionVMAgent": true,
+                      "ssh": {
+                        "publicKeys": [
+                          {
+                            "path": "[format('/home/{0}/.ssh/authorized_keys', parameters('runnerExecutionConfig').adminUsername)]",
+                            "keyData": "[parameters('runnerExecutionConfig').adminPublicKey]"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "networkProfile": {
+                    "networkInterfaceConfigurations": [
+                      {
+                        "name": "[format('{0}-nic', parameters('runnerScaleSetName'))]",
+                        "properties": {
+                          "primary": true,
+                          "enableAcceleratedNetworking": false,
+                          "ipConfigurations": [
+                            {
+                              "name": "ipconfig",
+                              "properties": {
+                                "subnet": {
+                                  "id": "[parameters('infrastructureSubnetId')]"
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                }
               },
               "dependsOn": [
                 "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('runnerExecutionIdentityName'))]"
               ]
             },
             {
-              "condition": "[variables('deployRunnerJob')]",
-              "type": "Microsoft.App/jobs",
+              "condition": "[variables('deployRunnerPool')]",
+              "type": "Microsoft.Storage/storageAccounts",
               "apiVersion": "2025-01-01",
-              "name": "[parameters('runnerJobName')]",
+              "name": "[variables('storageAccountName')]",
               "location": "[parameters('location')]",
               "tags": "[parameters('tags')]",
-              "identity": {
-                "type": "UserAssigned",
-                "userAssignedIdentities": {
-                  "[format('{0}', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('runnerExecutionIdentityName')))]": {},
-                  "[format('{0}', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('runnerRegistryIdentityName')))]": {}
-                }
+              "sku": {
+                "name": "Standard_LRS"
+              },
+              "kind": "StorageV2",
+              "properties": {
+                "allowBlobPublicAccess": false,
+                "allowSharedKeyAccess": true,
+                "minimumTlsVersion": "TLS1_2",
+                "supportsHttpsTrafficOnly": true
+              }
+            },
+            {
+              "condition": "[variables('deployRunnerPool')]",
+              "type": "Microsoft.Web/serverfarms",
+              "apiVersion": "2024-11-01",
+              "name": "[variables('functionPlanName')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "sku": {
+                "name": "Y1",
+                "tier": "Dynamic",
+                "size": "Y1",
+                "family": "Y"
               },
               "properties": {
-                "environmentId": "[resourceId('Microsoft.App/managedEnvironments', parameters('containerAppsEnvironmentName'))]",
-                "configuration": {
-                  "triggerType": "Event",
-                  "replicaTimeout": "[parameters('runnerExecutionConfig').replicaTimeout]",
-                  "replicaRetryLimit": "[parameters('runnerExecutionConfig').replicaRetryLimit]",
-                  "registries": [
+                "reserved": true
+              }
+            },
+            {
+              "condition": "[variables('deployRunnerPool')]",
+              "type": "Microsoft.Web/sites",
+              "apiVersion": "2024-11-01",
+              "name": "[parameters('runnerAutoscalerFunctionAppName')]",
+              "location": "[parameters('location')]",
+              "kind": "functionapp,linux",
+              "identity": {
+                "type": "SystemAssigned"
+              },
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "httpsOnly": true,
+                "reserved": true,
+                "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', variables('functionPlanName'))]",
+                "siteConfig": {
+                  "linuxFxVersion": "Python|3.11",
+                  "appSettings": [
                     {
-                      "server": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('containerRegistryResourceGroupName')), 'Microsoft.ContainerRegistry/registries', parameters('containerRegistryName')), '2025-04-01').loginServer]",
-                      "identity": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('runnerRegistryIdentityName'))]"
-                    }
-                  ],
-                  "secrets": [
+                      "name": "AzureWebJobsStorage",
+                      "value": "[if(variables('deployRunnerPool'), format('DefaultEndpointsProtocol=https;AccountName={0};EndpointSuffix={1};AccountKey={2}', variables('storageAccountName'), environment().suffixes.storage, listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')), '2025-01-01').keys[0].value), '')]"
+                    },
                     {
-                      "name": "[parameters('runnerExecutionConfig').githubPatSecretName]",
-                      "identity": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('runnerExecutionIdentityName'))]",
-                      "keyVaultUrl": "[parameters('runnerExecutionConfig').githubPatSecretUri]"
-                    }
-                  ],
-                  "eventTriggerConfig": {
-                    "parallelism": "[parameters('runnerExecutionConfig').parallelism]",
-                    "replicaCompletionCount": "[parameters('runnerExecutionConfig').replicaCompletionCount]",
-                    "scale": {
-                      "minExecutions": "[parameters('runnerExecutionConfig').minExecutions]",
-                      "maxExecutions": "[parameters('runnerExecutionConfig').maxExecutions]",
-                      "pollingInterval": "[parameters('runnerExecutionConfig').pollingInterval]",
-                      "rules": [
-                        {
-                          "name": "github-runner",
-                          "type": "github-runner",
-                          "metadata": {
-                            "githubApiURL": "[parameters('runnerExecutionConfig').githubApiUrl]",
-                            "owner": "[parameters('runnerExecutionConfig').owner]",
-                            "runnerScope": "[parameters('runnerExecutionConfig').runnerScope]",
-                            "repos": "[join(parameters('runnerExecutionConfig').repositories, ',')]",
-                            "labels": "[join(parameters('runnerExecutionConfig').runnerLabels, ',')]",
-                            "targetWorkflowQueueLength": "[string(parameters('runnerExecutionConfig').targetWorkflowQueueLength)]"
-                          },
-                          "auth": [
-                            {
-                              "secretRef": "[parameters('runnerExecutionConfig').githubPatSecretName]",
-                              "triggerParameter": "personalAccessToken"
-                            }
-                          ]
-                        }
-                      ]
-                    }
-                  }
-                },
-                "template": {
-                  "containers": [
+                      "name": "WEBSITE_CONTENTAZUREFILECONNECTIONSTRING",
+                      "value": "[if(variables('deployRunnerPool'), format('DefaultEndpointsProtocol=https;AccountName={0};EndpointSuffix={1};AccountKey={2}', variables('storageAccountName'), environment().suffixes.storage, listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')), '2025-01-01').keys[0].value), '')]"
+                    },
                     {
-                      "name": "github-runner",
-                      "image": "[format('{0}/{1}:{2}', reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('containerRegistryResourceGroupName')), 'Microsoft.ContainerRegistry/registries', parameters('containerRegistryName')), '2025-04-01').loginServer, parameters('runnerExecutionConfig').imageRepository, parameters('runnerExecutionConfig').imageTag)]",
-                      "env": [
-                        {
-                          "name": "GITHUB_PAT",
-                          "secretRef": "[parameters('runnerExecutionConfig').githubPatSecretName]"
-                        },
-                        {
-                          "name": "GH_URL",
-                          "value": "[parameters('runnerExecutionConfig').githubUrl]"
-                        },
-                        {
-                          "name": "RUNNER_GROUP",
-                          "value": "[parameters('runnerExecutionConfig').runnerGroup]"
-                        },
-                        {
-                          "name": "RUNNER_LABELS",
-                          "value": "[join(parameters('runnerExecutionConfig').runnerLabels, ',')]"
-                        },
-                        {
-                          "name": "REGISTRATION_TOKEN_API_URL",
-                          "value": "[parameters('runnerExecutionConfig').registrationTokenApiUrl]"
-                        }
-                      ],
-                      "resources": {
-                        "cpu": "[parameters('runnerExecutionConfig').cpu]",
-                        "memory": "[parameters('runnerExecutionConfig').memory]"
-                      }
+                      "name": "WEBSITE_CONTENTSHARE",
+                      "value": "[toLower(take(replace(parameters('runnerAutoscalerFunctionAppName'), '-', ''), 63))]"
+                    },
+                    {
+                      "name": "FUNCTIONS_EXTENSION_VERSION",
+                      "value": "~4"
+                    },
+                    {
+                      "name": "FUNCTIONS_WORKER_RUNTIME",
+                      "value": "python"
+                    },
+                    {
+                      "name": "WEBSITE_RUN_FROM_PACKAGE",
+                      "value": "1"
+                    },
+                    {
+                      "name": "GITHUB_ORG",
+                      "value": "[parameters('runnerExecutionConfig').owner]"
+                    },
+                    {
+                      "name": "RUNNER_LABEL",
+                      "value": "[first(parameters('runnerExecutionConfig').runnerLabels)]"
+                    },
+                    {
+                      "name": "TARGET_REPOSITORIES",
+                      "value": "[variables('targetRepositoriesCsv')]"
+                    },
+                    {
+                      "name": "VMSS_RESOURCE_ID",
+                      "value": "[resourceId('Microsoft.Compute/virtualMachineScaleSets', parameters('runnerScaleSetName'))]"
+                    },
+                    {
+                      "name": "MAX_RUNNERS",
+                      "value": "[string(parameters('runnerExecutionConfig').maxRunners)]"
+                    },
+                    {
+                      "name": "GITHUB_PAT",
+                      "value": "[format('@Microsoft.KeyVault(SecretUri={0})', format('{0}secrets/{1}', reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('keyVaultResourceGroupName')), 'Microsoft.KeyVault/vaults', parameters('keyVaultName')), '2024-11-01').vaultUri, parameters('runnerExecutionConfig').githubPatSecretName))]"
+                    },
+                    {
+                      "name": "GITHUB_WEBHOOK_SECRET",
+                      "value": "[format('@Microsoft.KeyVault(SecretUri={0})', format('{0}secrets/{1}', reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('keyVaultResourceGroupName')), 'Microsoft.KeyVault/vaults', parameters('keyVaultName')), '2024-11-01').vaultUri, parameters('runnerExecutionConfig').githubWebhookSecretName))]"
                     }
                   ]
                 }
               },
               "dependsOn": [
-                "[resourceId('Microsoft.App/managedEnvironments', parameters('containerAppsEnvironmentName'))]",
-                "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('runnerExecutionIdentityName'))]",
-                "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('runnerRegistryIdentityName'))]"
+                "[resourceId('Microsoft.Web/serverfarms', variables('functionPlanName'))]",
+                "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]",
+                "[resourceId('Microsoft.Compute/virtualMachineScaleSets', parameters('runnerScaleSetName'))]"
+              ]
+            },
+            {
+              "condition": "[variables('deployRunnerPool')]",
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[format('Microsoft.Compute/virtualMachineScaleSets/{0}', parameters('runnerScaleSetName'))]",
+              "name": "[guid(resourceId('Microsoft.Compute/virtualMachineScaleSets', parameters('runnerScaleSetName')), resourceId('Microsoft.Web/sites', parameters('runnerAutoscalerFunctionAppName')), 'runner-autoscaler-vmss-contributor')]",
+              "properties": {
+                "roleDefinitionId": "[variables('virtualMachineContributorRoleDefinitionId')]",
+                "principalId": "[reference(resourceId('Microsoft.Web/sites', parameters('runnerAutoscalerFunctionAppName')), '2024-11-01', 'full').identity.principalId]",
+                "principalType": "ServicePrincipal"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Web/sites', parameters('runnerAutoscalerFunctionAppName'))]",
+                "[resourceId('Microsoft.Compute/virtualMachineScaleSets', parameters('runnerScaleSetName'))]"
               ]
             }
           ],
@@ -2243,60 +2340,51 @@
             "runnerPlatform": {
               "type": "object",
               "value": {
-                "environment": {
-                  "name": "[parameters('containerAppsEnvironmentName')]",
-                  "id": "[resourceId('Microsoft.App/managedEnvironments', parameters('containerAppsEnvironmentName'))]",
+                "resourceGroupName": "[resourceGroup().name]",
+                "vmScaleSet": {
+                  "name": "[parameters('runnerScaleSetName')]",
+                  "id": "[if(variables('deployRunnerPool'), resourceId('Microsoft.Compute/virtualMachineScaleSets', parameters('runnerScaleSetName')), null())]",
                   "subnetId": "[parameters('infrastructureSubnetId')]",
-                  "ingressModel": "InternalOnly",
-                  "boundaryNotes": [
-                    "The Container Apps environment is the runner execution boundary and is isolated from shared services by subnet separation.",
-                    "The environment is internal-only and uses the dedicated hub runner subnet rather than sharing workload spokes or operator connectivity resources."
+                  "minRunners": "[parameters('runnerExecutionConfig').minRunners]",
+                  "maxRunners": "[parameters('runnerExecutionConfig').maxRunners]",
+                  "privateConnectivity": [
+                    "Runner VMs live on the dedicated hub runner subnet with no per-instance public IPs.",
+                    "Outbound access to GitHub and package sources is expected to use the subnet NAT path rather than direct inbound exposure."
                   ]
                 },
                 "identities": {
-                  "registryPull": {
-                    "name": "[parameters('runnerRegistryIdentityName')]",
-                    "resourceId": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('runnerRegistryIdentityName'))]",
-                    "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('runnerRegistryIdentityName')), '2024-11-30').principalId]",
-                    "roleAssignments": []
-                  },
                   "execution": {
                     "name": "[parameters('runnerExecutionIdentityName')]",
-                    "resourceId": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('runnerExecutionIdentityName'))]",
-                    "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('runnerExecutionIdentityName')), '2024-11-30').principalId]",
-                    "roleAssignments": [
-                      "[extensionResourceId(resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('runnerExecutionIdentityName')), 'runner-key-vault-secrets-user'))]"
-                    ],
-                    "workloadAccessModel": "Assign Azure RBAC for deployment targets to this identity outside the shared platform baseline."
+                    "resourceId": "[if(variables('deployRunnerPool'), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('runnerExecutionIdentityName')), null())]",
+                    "principalId": "[if(variables('deployRunnerPool'), reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('runnerExecutionIdentityName')), '2024-11-30').principalId, null())]",
+                    "roleAssignments": [],
+                    "workloadAccessModel": "Assign Azure RBAC for deployment targets to the runner execution identity outside the shared platform baseline."
                   }
                 },
-                "job": {
-                  "name": "[parameters('runnerJobName')]",
-                  "deploymentEnabled": "[variables('deployRunnerJob')]",
-                  "triggerType": "Event",
-                  "image": "[format('{0}/{1}:{2}', reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('containerRegistryResourceGroupName')), 'Microsoft.ContainerRegistry/registries', parameters('containerRegistryName')), '2025-04-01').loginServer, parameters('runnerExecutionConfig').imageRepository, parameters('runnerExecutionConfig').imageTag)]",
-                  "githubApiUrl": "[parameters('runnerExecutionConfig').githubApiUrl]",
-                  "githubUrl": "[parameters('runnerExecutionConfig').githubUrl]",
-                  "runnerScope": "[parameters('runnerExecutionConfig').runnerScope]",
-                  "runnerOwner": "[parameters('runnerExecutionConfig').owner]",
-                  "runnerGroup": "[parameters('runnerExecutionConfig').runnerGroup]",
-                  "privateConnectivity": [
-                    "Runner executions start inside the hub-integrated Container Apps environment and resolve shared services through hub-linked private DNS zones.",
-                    "Image pulls use the dedicated registry identity against the private central ACR, and secret retrieval uses Key Vault over private endpoint connectivity."
-                  ],
-                  "secretHandlingModel": [
-                    "A single GitHub PAT stored in Key Vault is used by both the KEDA scaler (to detect queued jobs) and the container entrypoint (to request a short-lived registration token from the GitHub API at runtime).",
-                    "Registration tokens are ephemeral (1-hour lifetime) and generated on each job execution — they are never stored in Key Vault.",
-                    "Only the runner execution identity receives Key Vault secret access; operators and future workload identities remain separate."
-                  ],
-                  "platformConstraints": [
-                    "Register runners at the GitHub organization scope and keep them in the HexMaster Landingzone runner group.",
-                    "Use this runner platform only for private repositories.",
-                    "Container Apps jobs do not support Docker-in-Docker workflows."
-                  ],
-                  "bootstrapNotes": "The container entrypoint handles registration automatically. It uses the GITHUB_PAT env var to call the registration token API at runtime, then runs config.sh --ephemeral and run.sh for a single job execution.",
-                  "requiredPatScopes": "The PAT stored in Key Vault needs admin:org scope to generate registration tokens and repo scope for KEDA to detect queued workflow jobs."
-                }
+                "autoscaler": {
+                  "functionApp": {
+                    "name": "[parameters('runnerAutoscalerFunctionAppName')]",
+                    "resourceId": "[if(variables('deployRunnerPool'), resourceId('Microsoft.Web/sites', parameters('runnerAutoscalerFunctionAppName')), null())]",
+                    "principalId": "[if(variables('deployRunnerPool'), reference(resourceId('Microsoft.Web/sites', parameters('runnerAutoscalerFunctionAppName')), '2024-11-01', 'full').identity.principalId, null())]",
+                    "defaultHostname": "[if(variables('deployRunnerPool'), reference(resourceId('Microsoft.Web/sites', parameters('runnerAutoscalerFunctionAppName')), '2024-11-01').defaultHostName, null())]",
+                    "webhookUrl": "[if(variables('deployRunnerPool'), format('https://{0}/api/workflow-job-webhook', reference(resourceId('Microsoft.Web/sites', parameters('runnerAutoscalerFunctionAppName')), '2024-11-01').defaultHostName), null())]"
+                  },
+                  "scalingModel": [
+                    "The autoscaler reacts to GitHub workflow_job webhook events.",
+                    "Queued jobs increase VMSS capacity one runner at a time up to the configured maximum.",
+                    "Completed jobs scale the VMSS back to zero once no matching runners remain busy."
+                  ]
+                },
+                "secretHandlingModel": [
+                  "The VM scale set bootstrap retrieves the GitHub registration PAT from Key Vault through the runner execution managed identity.",
+                  "The autoscaler Function App consumes the GitHub PAT and webhook secret through Key Vault references rather than storing them inline in the template.",
+                  "Registration tokens remain short-lived and are requested from GitHub at runner startup; they are never stored in Key Vault."
+                ],
+                "platformConstraints": [
+                  "Register runners at the GitHub organization scope and keep them in the HexMaster Landingzone runner group.",
+                  "VMSS capacity defaults to zero and is expected to be driven by workflow_job webhook activity.",
+                  "Linux runners install Docker so workflows can use container actions and service containers."
+                ]
               }
             }
           }
@@ -2304,26 +2392,30 @@
       },
       "dependsOn": [
         "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('connectivityResourceGroupName')), 'Microsoft.Resources/deployments', 'hub-network-foundation')]",
-        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('platformResourceGroupName'))]",
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('runnerResourceGroupName'))]",
         "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('platformResourceGroupName')), 'Microsoft.Resources/deployments', 'shared-platform-services')]"
       ]
     },
     {
+      "condition": "[and(parameters('runnerExecutionConfig').deployRunnerPool, not(empty(parameters('runnerExecutionConfig').adminPublicKey)))]",
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
-      "name": "runner-registry-access",
-      "resourceGroup": "[variables('containerRegistryResourceGroupName')]",
+      "name": "runner-execution-key-vault-assignment",
+      "resourceGroup": "[variables('platformResourceGroupName')]",
       "properties": {
         "expressionEvaluationOptions": {
           "scope": "inner"
         },
         "mode": "Incremental",
         "parameters": {
-          "containerRegistryName": {
-            "value": "[variables('containerRegistryName')]"
+          "keyVaultName": {
+            "value": "[variables('platformKeyVaultName')]"
           },
           "principalId": {
-            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('platformResourceGroupName')), 'Microsoft.Resources/deployments', 'runner-execution-platform'), '2025-04-01').outputs.runnerPlatform.value.identities.registryPull.principalId]"
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('runnerResourceGroupName')), 'Microsoft.Resources/deployments', 'runner-execution-platform'), '2025-04-01').outputs.runnerPlatform.value.identities.execution.principalId]"
+          },
+          "roleAssignmentGuid": {
+            "value": "[guid(variables('platformKeyVaultName'), variables('runnerExecutionIdentityName'), 'runner-key-vault-secrets-user')]"
           }
         },
         "template": {
@@ -2333,49 +2425,125 @@
             "_generator": {
               "name": "bicep",
               "version": "0.39.26.7824",
-              "templateHash": "14625587641861868814"
+              "templateHash": "3322333902936254991"
             }
           },
           "parameters": {
-            "containerRegistryName": {
+            "keyVaultName": {
               "type": "string",
               "metadata": {
-                "description": "Name of the existing Azure Container Registry."
+                "description": "Name of the Key Vault that grants secret read access."
               }
             },
             "principalId": {
               "type": "string",
               "metadata": {
-                "description": "Principal ID of the managed identity that needs AcrPull on the registry."
+                "description": "Principal ID to assign the Key Vault Secrets User role to."
+              }
+            },
+            "roleAssignmentGuid": {
+              "type": "string",
+              "metadata": {
+                "description": "Deterministic GUID string used as the role assignment resource name."
               }
             }
           },
           "variables": {
-            "acrPullRoleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')]"
+            "keyVaultSecretsUserRoleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-408a-b874-0445c86b69e6')]"
           },
           "resources": [
             {
               "type": "Microsoft.Authorization/roleAssignments",
               "apiVersion": "2022-04-01",
-              "scope": "[format('Microsoft.ContainerRegistry/registries/{0}', parameters('containerRegistryName'))]",
-              "name": "[guid(resourceId('Microsoft.ContainerRegistry/registries', parameters('containerRegistryName')), parameters('principalId'), 'runner-acr-pull')]",
+              "scope": "[format('Microsoft.KeyVault/vaults/{0}', parameters('keyVaultName'))]",
+              "name": "[parameters('roleAssignmentGuid')]",
               "properties": {
-                "roleDefinitionId": "[variables('acrPullRoleDefinitionId')]",
+                "roleDefinitionId": "[variables('keyVaultSecretsUserRoleDefinitionId')]",
                 "principalId": "[parameters('principalId')]",
                 "principalType": "ServicePrincipal"
               }
             }
-          ],
-          "outputs": {
-            "roleAssignmentId": {
-              "type": "string",
-              "value": "[extensionResourceId(resourceId('Microsoft.ContainerRegistry/registries', parameters('containerRegistryName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.ContainerRegistry/registries', parameters('containerRegistryName')), parameters('principalId'), 'runner-acr-pull'))]"
-            }
-          }
+          ]
         }
       },
       "dependsOn": [
-        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('platformResourceGroupName')), 'Microsoft.Resources/deployments', 'runner-execution-platform')]"
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('platformResourceGroupName'))]",
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('runnerResourceGroupName')), 'Microsoft.Resources/deployments', 'runner-execution-platform')]"
+      ]
+    },
+    {
+      "condition": "[and(parameters('runnerExecutionConfig').deployRunnerPool, not(empty(parameters('runnerExecutionConfig').adminPublicKey)))]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "runner-autoscaler-key-vault-assignment",
+      "resourceGroup": "[variables('platformResourceGroupName')]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "keyVaultName": {
+            "value": "[variables('platformKeyVaultName')]"
+          },
+          "principalId": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('runnerResourceGroupName')), 'Microsoft.Resources/deployments', 'runner-execution-platform'), '2025-04-01').outputs.runnerPlatform.value.autoscaler.functionApp.principalId]"
+          },
+          "roleAssignmentGuid": {
+            "value": "[guid(variables('platformKeyVaultName'), variables('runnerAutoscalerFunctionAppName'), 'runner-autoscaler-key-vault-secrets-user')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.39.26.7824",
+              "templateHash": "3322333902936254991"
+            }
+          },
+          "parameters": {
+            "keyVaultName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the Key Vault that grants secret read access."
+              }
+            },
+            "principalId": {
+              "type": "string",
+              "metadata": {
+                "description": "Principal ID to assign the Key Vault Secrets User role to."
+              }
+            },
+            "roleAssignmentGuid": {
+              "type": "string",
+              "metadata": {
+                "description": "Deterministic GUID string used as the role assignment resource name."
+              }
+            }
+          },
+          "variables": {
+            "keyVaultSecretsUserRoleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-408a-b874-0445c86b69e6')]"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[format('Microsoft.KeyVault/vaults/{0}', parameters('keyVaultName'))]",
+              "name": "[parameters('roleAssignmentGuid')]",
+              "properties": {
+                "roleDefinitionId": "[variables('keyVaultSecretsUserRoleDefinitionId')]",
+                "principalId": "[parameters('principalId')]",
+                "principalType": "ServicePrincipal"
+              }
+            }
+          ]
+        }
+      },
+      "dependsOn": [
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('platformResourceGroupName'))]",
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('runnerResourceGroupName')), 'Microsoft.Resources/deployments', 'runner-execution-platform')]"
       ]
     }
   ],
@@ -2398,7 +2566,7 @@
     },
     "runnerExecutionPlatform": {
       "type": "object",
-      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('platformResourceGroupName')), 'Microsoft.Resources/deployments', 'runner-execution-platform'), '2025-04-01').outputs.runnerPlatform.value]"
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('runnerResourceGroupName')), 'Microsoft.Resources/deployments', 'runner-execution-platform'), '2025-04-01').outputs.runnerPlatform.value]"
     },
     "workloadSpokeNetworking": {
       "type": "object",

@@ -6,258 +6,325 @@ param location string
 @description('Tags applied to runner platform resources.')
 param tags object = {}
 
-@description('Name of the Container Apps managed environment hosting runner jobs.')
-param containerAppsEnvironmentName string
+@description('Name of the GitHub Actions runner VM scale set.')
+param runnerScaleSetName string
 
-@description('Name of the GitHub Actions runner job definition.')
-param runnerJobName string
-
-@description('Name of the runner execution identity used inside the job.')
+@description('Name of the runner execution identity used by the VM scale set.')
 param runnerExecutionIdentityName string
 
-@description('Name of the runner registry identity used for ACR pulls.')
-param runnerRegistryIdentityName string
+@description('Name of the autoscaler Function App.')
+param runnerAutoscalerFunctionAppName string
 
-@description('Name of the central Azure Container Registry.')
-param containerRegistryName string
-
-@description('Resource group containing the existing central Azure Container Registry.')
-param containerRegistryResourceGroupName string
-
-@description('Name of the shared platform Key Vault in this resource group.')
+@description('Name of the existing shared platform Key Vault.')
 param keyVaultName string
 
-@description('Subnet resource ID delegated to the Container Apps environment.')
+@description('Resource group containing the shared platform Key Vault.')
+param keyVaultResourceGroupName string
+
+@description('Subnet resource ID used by the runner VM scale set.')
 param infrastructureSubnetId string
 
-@description('Runner execution configuration for the Container Apps environment and GitHub runner job.')
+@description('Runner execution configuration for the VM scale set and webhook autoscaler.')
 param runnerExecutionConfig object = {
-  deployRunnerJob: false
-  imageRepository: 'github-actions-runner'
-  imageTag: 'latest'
-  githubApiUrl: 'https://api.github.com'
+  deployRunnerPool: false
   githubUrl: 'https://github.com/hexmasternl'
-  runnerScope: 'org'
   owner: 'hexmasternl'
   repositories: [
     'hexmaster-waf-foundation'
   ]
   runnerLabels: [
-    'aca-job'
+    'vmss'
   ]
   runnerGroup: 'HexMaster Landingzone'
-  targetWorkflowQueueLength: 1
-  minExecutions: 0
-  maxExecutions: 5
-  pollingInterval: 30
-  replicaTimeout: 1800
-  replicaRetryLimit: 0
-  replicaCompletionCount: 1
-  parallelism: 1
-  cpu: 2
-  memory: '4Gi'
+  runnerVersion: '2.321.0'
+  vmSku: 'Standard_D2as_v5'
+  osDiskSizeGb: 64
+  adminUsername: 'runneradmin'
+  adminPublicKey: ''
+  minRunners: 0
+  maxRunners: 10
   githubPatSecretName: 'github-actions-pat'
-  githubPatSecretUri: ''
+  githubWebhookSecretName: 'github-webhook-secret'
   registrationTokenApiUrl: 'https://api.github.com/orgs/hexmasternl/actions/runners/registration-token'
 }
 
-var keyVaultSecretsUserRoleDefinitionId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-408a-b874-0445c86b69e6')
-var deployRunnerJob = runnerExecutionConfig.deployRunnerJob && !empty(runnerExecutionConfig.githubUrl) && !empty(runnerExecutionConfig.registrationTokenApiUrl) && !empty(runnerExecutionConfig.githubPatSecretUri)
-var runnerImage = '${containerRegistry.properties.loginServer}/${runnerExecutionConfig.imageRepository}:${runnerExecutionConfig.imageTag}'
-
-resource containerRegistry 'Microsoft.ContainerRegistry/registries@2025-04-01' existing = {
-  name: containerRegistryName
-  scope: resourceGroup(subscription().subscriptionId, containerRegistryResourceGroupName)
-}
+var virtualMachineContributorRoleDefinitionId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '9980e02c-c2be-4d73-94e8-173b1dc7cf3c')
+var deployRunnerPool = runnerExecutionConfig.deployRunnerPool && !empty(runnerExecutionConfig.adminPublicKey)
+var functionPlanName = 'plan-${take(replace(runnerAutoscalerFunctionAppName, '_', '-'), 36)}'
+var storageAccountName = toLower(take('st${uniqueString(resourceGroup().id, runnerAutoscalerFunctionAppName)}', 24))
+var patSecretUri = '${platformKeyVault.properties.vaultUri}secrets/${runnerExecutionConfig.githubPatSecretName}'
+var webhookSecretUri = '${platformKeyVault.properties.vaultUri}secrets/${runnerExecutionConfig.githubWebhookSecretName}'
+var targetRepositories = [for repository in runnerExecutionConfig.repositories: '${runnerExecutionConfig.owner}/${repository}']
+var targetRepositoriesCsv = join(targetRepositories, ',')
+var autoscalerStorageConnectionString = deployRunnerPool ? 'DefaultEndpointsProtocol=https;AccountName=${autoscalerStorage!.name};EndpointSuffix=${environment().suffixes.storage};AccountKey=${autoscalerStorage!.listKeys().keys[0].value}' : ''
+var cloudInitTemplate = loadTextContent('../../runner-vmss/cloud-init.yml')
+var cloudInit = replace(
+  replace(
+    replace(
+      replace(
+        replace(
+          replace(
+            replace(cloudInitTemplate, '__RUNNER_VERSION__', runnerExecutionConfig.runnerVersion),
+            '__GITHUB_URL__',
+            runnerExecutionConfig.githubUrl),
+          '__RUNNER_GROUP__',
+          runnerExecutionConfig.runnerGroup),
+        '__RUNNER_LABELS__',
+        join(runnerExecutionConfig.runnerLabels, ',')),
+      '__KEY_VAULT_URI__',
+      platformKeyVault.properties.vaultUri),
+    '__GITHUB_PAT_SECRET_NAME__',
+    runnerExecutionConfig.githubPatSecretName),
+  '__REGISTRATION_TOKEN_API_URL__',
+  runnerExecutionConfig.registrationTokenApiUrl)
 
 resource platformKeyVault 'Microsoft.KeyVault/vaults@2024-11-01' existing = {
   name: keyVaultName
+  scope: resourceGroup(subscription().subscriptionId, keyVaultResourceGroupName)
 }
 
-resource runnerRegistryIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2024-11-30' = {
-  name: runnerRegistryIdentityName
-  location: location
-  tags: tags
-}
-
-resource runnerExecutionIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2024-11-30' = {
+resource runnerExecutionIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2024-11-30' = if (deployRunnerPool) {
   name: runnerExecutionIdentityName
   location: location
   tags: tags
 }
 
-resource containerAppsEnvironment 'Microsoft.App/managedEnvironments@2025-01-01' = {
-  name: containerAppsEnvironmentName
+resource runnerVmss 'Microsoft.Compute/virtualMachineScaleSets@2024-11-01' = if (deployRunnerPool) {
+  name: runnerScaleSetName
   location: location
   tags: tags
-  properties: {
-    vnetConfiguration: {
-      infrastructureSubnetId: infrastructureSubnetId
-      internal: true
-    }
+  sku: {
+    name: runnerExecutionConfig.vmSku
+    tier: 'Standard'
+    capacity: runnerExecutionConfig.minRunners
   }
-}
-
-resource runnerExecutionKeyVaultAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(platformKeyVault.id, runnerExecutionIdentity.id, 'runner-key-vault-secrets-user')
-  scope: platformKeyVault
-  properties: {
-    roleDefinitionId: keyVaultSecretsUserRoleDefinitionId
-    principalId: runnerExecutionIdentity.properties.principalId
-    principalType: 'ServicePrincipal'
-  }
-}
-
-resource githubRunnerJob 'Microsoft.App/jobs@2025-01-01' = if (deployRunnerJob) {
-  name: runnerJobName
-  location: location
-  tags: tags
   identity: {
     type: 'UserAssigned'
     userAssignedIdentities: {
       '${runnerExecutionIdentity.id}': {}
-      '${runnerRegistryIdentity.id}': {}
     }
   }
   properties: {
-    environmentId: containerAppsEnvironment.id
-    configuration: {
-      triggerType: 'Event'
-      replicaTimeout: runnerExecutionConfig.replicaTimeout
-      replicaRetryLimit: runnerExecutionConfig.replicaRetryLimit
-      registries: [
-        {
-          server: containerRegistry.properties.loginServer
-          identity: runnerRegistryIdentity.id
+    overprovision: false
+    upgradePolicy: {
+      mode: 'Manual'
+    }
+    virtualMachineProfile: {
+      storageProfile: {
+        imageReference: {
+          publisher: 'Canonical'
+          offer: '0001-com-ubuntu-server-jammy'
+          sku: '22_04-lts-gen2'
+          version: 'latest'
         }
-      ]
-      secrets: [
-        {
-          name: runnerExecutionConfig.githubPatSecretName
-          identity: runnerExecutionIdentity.id
-          keyVaultUrl: runnerExecutionConfig.githubPatSecretUri
+        osDisk: {
+          createOption: 'FromImage'
+          caching: 'ReadWrite'
+          diskSizeGB: runnerExecutionConfig.osDiskSizeGb
+          managedDisk: {
+            storageAccountType: 'StandardSSD_LRS'
+          }
         }
-      ]
-      eventTriggerConfig: {
-        parallelism: runnerExecutionConfig.parallelism
-        replicaCompletionCount: runnerExecutionConfig.replicaCompletionCount
-        scale: {
-          minExecutions: runnerExecutionConfig.minExecutions
-          maxExecutions: runnerExecutionConfig.maxExecutions
-          pollingInterval: runnerExecutionConfig.pollingInterval
-          rules: [
-            {
-              name: 'github-runner'
-              type: 'github-runner'
-                metadata: {
-                  githubApiURL: runnerExecutionConfig.githubApiUrl
-                  owner: runnerExecutionConfig.owner
-                  runnerScope: runnerExecutionConfig.runnerScope
-                  repos: join(runnerExecutionConfig.repositories, ',')
-                  labels: join(runnerExecutionConfig.runnerLabels, ',')
-                  targetWorkflowQueueLength: string(runnerExecutionConfig.targetWorkflowQueueLength)
-                }
-              auth: [
+      }
+      osProfile: {
+        computerNamePrefix: take(runnerScaleSetName, 9)
+        adminUsername: runnerExecutionConfig.adminUsername
+        customData: base64(cloudInit)
+        linuxConfiguration: {
+          disablePasswordAuthentication: true
+          provisionVMAgent: true
+          ssh: {
+            publicKeys: [
+              {
+                path: '/home/${runnerExecutionConfig.adminUsername}/.ssh/authorized_keys'
+                keyData: runnerExecutionConfig.adminPublicKey
+              }
+            ]
+          }
+        }
+      }
+      networkProfile: {
+        networkInterfaceConfigurations: [
+          {
+            name: '${runnerScaleSetName}-nic'
+            properties: {
+              primary: true
+              enableAcceleratedNetworking: false
+              ipConfigurations: [
                 {
-                  secretRef: runnerExecutionConfig.githubPatSecretName
-                  triggerParameter: 'personalAccessToken'
+                  name: 'ipconfig'
+                  properties: {
+                    subnet: {
+                      id: infrastructureSubnetId
+                    }
+                  }
                 }
               ]
             }
-          ]
-        }
+          }
+        ]
       }
     }
-    template: {
-      containers: [
+  }
+}
+
+resource autoscalerStorage 'Microsoft.Storage/storageAccounts@2025-01-01' = if (deployRunnerPool) {
+  name: storageAccountName
+  location: location
+  tags: tags
+  sku: {
+    name: 'Standard_LRS'
+  }
+  kind: 'StorageV2'
+  properties: {
+    allowBlobPublicAccess: false
+    allowSharedKeyAccess: true
+    minimumTlsVersion: 'TLS1_2'
+    supportsHttpsTrafficOnly: true
+  }
+}
+
+resource autoscalerPlan 'Microsoft.Web/serverfarms@2024-11-01' = if (deployRunnerPool) {
+  name: functionPlanName
+  location: location
+  tags: tags
+  sku: {
+    name: 'Y1'
+    tier: 'Dynamic'
+    size: 'Y1'
+    family: 'Y'
+  }
+  properties: {
+    reserved: true
+  }
+}
+
+resource runnerAutoscaler 'Microsoft.Web/sites@2024-11-01' = if (deployRunnerPool) {
+  name: runnerAutoscalerFunctionAppName
+  location: location
+  kind: 'functionapp,linux'
+  identity: {
+    type: 'SystemAssigned'
+  }
+  tags: tags
+  properties: {
+    httpsOnly: true
+    reserved: true
+    serverFarmId: autoscalerPlan.id
+    siteConfig: {
+      linuxFxVersion: 'Python|3.11'
+      appSettings: [
         {
-          name: 'github-runner'
-          image: runnerImage
-          env: [
-            {
-              name: 'GITHUB_PAT'
-              secretRef: runnerExecutionConfig.githubPatSecretName
-            }
-            {
-              name: 'GH_URL'
-              value: runnerExecutionConfig.githubUrl
-            }
-            {
-              name: 'RUNNER_GROUP'
-              value: runnerExecutionConfig.runnerGroup
-            }
-            {
-              name: 'RUNNER_LABELS'
-              value: join(runnerExecutionConfig.runnerLabels, ',')
-            }
-            {
-              name: 'REGISTRATION_TOKEN_API_URL'
-              value: runnerExecutionConfig.registrationTokenApiUrl
-            }
-          ]
-          resources: {
-            cpu: runnerExecutionConfig.cpu
-            memory: runnerExecutionConfig.memory
-          }
+          name: 'AzureWebJobsStorage'
+          value: autoscalerStorageConnectionString
+        }
+        {
+          name: 'WEBSITE_CONTENTAZUREFILECONNECTIONSTRING'
+          value: autoscalerStorageConnectionString
+        }
+        {
+          name: 'WEBSITE_CONTENTSHARE'
+          value: toLower(take(replace(runnerAutoscalerFunctionAppName, '-', ''), 63))
+        }
+        {
+          name: 'FUNCTIONS_EXTENSION_VERSION'
+          value: '~4'
+        }
+        {
+          name: 'FUNCTIONS_WORKER_RUNTIME'
+          value: 'python'
+        }
+        {
+          name: 'WEBSITE_RUN_FROM_PACKAGE'
+          value: '1'
+        }
+        {
+          name: 'GITHUB_ORG'
+          value: runnerExecutionConfig.owner
+        }
+        {
+          name: 'RUNNER_LABEL'
+          value: first(runnerExecutionConfig.runnerLabels)
+        }
+        {
+          name: 'TARGET_REPOSITORIES'
+          value: targetRepositoriesCsv
+        }
+        {
+          name: 'VMSS_RESOURCE_ID'
+          value: runnerVmss.id
+        }
+        {
+          name: 'MAX_RUNNERS'
+          value: string(runnerExecutionConfig.maxRunners)
+        }
+        {
+          name: 'GITHUB_PAT'
+          value: '@Microsoft.KeyVault(SecretUri=${patSecretUri})'
+        }
+        {
+          name: 'GITHUB_WEBHOOK_SECRET'
+          value: '@Microsoft.KeyVault(SecretUri=${webhookSecretUri})'
         }
       ]
     }
   }
 }
 
+resource runnerAutoscalerVmssAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (deployRunnerPool) {
+  name: guid(runnerVmss.id, runnerAutoscaler.id, 'runner-autoscaler-vmss-contributor')
+  scope: runnerVmss
+  properties: {
+    roleDefinitionId: virtualMachineContributorRoleDefinitionId
+    principalId: runnerAutoscaler!.identity.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
 output runnerPlatform object = {
-  environment: {
-    name: containerAppsEnvironment.name
-    id: containerAppsEnvironment.id
+  resourceGroupName: resourceGroup().name
+  vmScaleSet: {
+    name: runnerScaleSetName
+    id: deployRunnerPool ? runnerVmss.id : null
     subnetId: infrastructureSubnetId
-    ingressModel: 'InternalOnly'
-    boundaryNotes: [
-      'The Container Apps environment is the runner execution boundary and is isolated from shared services by subnet separation.'
-      'The environment is internal-only and uses the dedicated hub runner subnet rather than sharing workload spokes or operator connectivity resources.'
+    minRunners: runnerExecutionConfig.minRunners
+    maxRunners: runnerExecutionConfig.maxRunners
+    privateConnectivity: [
+      'Runner VMs live on the dedicated hub runner subnet with no per-instance public IPs.'
+      'Outbound access to GitHub and package sources is expected to use the subnet NAT path rather than direct inbound exposure.'
     ]
   }
   identities: {
-    registryPull: {
-      name: runnerRegistryIdentity.name
-      resourceId: runnerRegistryIdentity.id
-      principalId: runnerRegistryIdentity.properties.principalId
-      roleAssignments: []
-    }
     execution: {
-      name: runnerExecutionIdentity.name
-      resourceId: runnerExecutionIdentity.id
-      principalId: runnerExecutionIdentity.properties.principalId
-      roleAssignments: [
-        runnerExecutionKeyVaultAssignment.id
-      ]
-      workloadAccessModel: 'Assign Azure RBAC for deployment targets to this identity outside the shared platform baseline.'
+      name: runnerExecutionIdentityName
+      resourceId: deployRunnerPool ? runnerExecutionIdentity.id : null
+      principalId: deployRunnerPool ? runnerExecutionIdentity!.properties.principalId : null
+      roleAssignments: []
+      workloadAccessModel: 'Assign Azure RBAC for deployment targets to the runner execution identity outside the shared platform baseline.'
     }
   }
-  job: {
-    name: runnerJobName
-    deploymentEnabled: deployRunnerJob
-    triggerType: 'Event'
-    image: runnerImage
-    githubApiUrl: runnerExecutionConfig.githubApiUrl
-    githubUrl: runnerExecutionConfig.githubUrl
-    runnerScope: runnerExecutionConfig.runnerScope
-    runnerOwner: runnerExecutionConfig.owner
-    runnerGroup: runnerExecutionConfig.runnerGroup
-    privateConnectivity: [
-      'Runner executions start inside the hub-integrated Container Apps environment and resolve shared services through hub-linked private DNS zones.'
-      'Image pulls use the dedicated registry identity against the private central ACR, and secret retrieval uses Key Vault over private endpoint connectivity.'
+  autoscaler: {
+    functionApp: {
+      name: runnerAutoscalerFunctionAppName
+      resourceId: deployRunnerPool ? runnerAutoscaler!.id : null
+      principalId: deployRunnerPool ? runnerAutoscaler!.identity.principalId : null
+      defaultHostname: deployRunnerPool ? runnerAutoscaler!.properties.defaultHostName : null
+      webhookUrl: deployRunnerPool ? 'https://${runnerAutoscaler!.properties.defaultHostName}/api/workflow-job-webhook' : null
+    }
+    scalingModel: [
+      'The autoscaler reacts to GitHub workflow_job webhook events.'
+      'Queued jobs increase VMSS capacity one runner at a time up to the configured maximum.'
+      'Completed jobs scale the VMSS back to zero once no matching runners remain busy.'
     ]
-    secretHandlingModel: [
-      'A single GitHub PAT stored in Key Vault is used by both the KEDA scaler (to detect queued jobs) and the container entrypoint (to request a short-lived registration token from the GitHub API at runtime).'
-      'Registration tokens are ephemeral (1-hour lifetime) and generated on each job execution — they are never stored in Key Vault.'
-      'Only the runner execution identity receives Key Vault secret access; operators and future workload identities remain separate.'
-    ]
-    platformConstraints: [
-      'Register runners at the GitHub organization scope and keep them in the HexMaster Landingzone runner group.'
-      'Use this runner platform only for private repositories.'
-      'Container Apps jobs do not support Docker-in-Docker workflows.'
-    ]
-    bootstrapNotes: 'The container entrypoint handles registration automatically. It uses the GITHUB_PAT env var to call the registration token API at runtime, then runs config.sh --ephemeral and run.sh for a single job execution.'
-    requiredPatScopes: 'The PAT stored in Key Vault needs admin:org scope to generate registration tokens and repo scope for KEDA to detect queued workflow jobs.'
   }
+  secretHandlingModel: [
+    'The VM scale set bootstrap retrieves the GitHub registration PAT from Key Vault through the runner execution managed identity.'
+    'The autoscaler Function App consumes the GitHub PAT and webhook secret through Key Vault references rather than storing them inline in the template.'
+    'Registration tokens remain short-lived and are requested from GitHub at runner startup; they are never stored in Key Vault.'
+  ]
+  platformConstraints: [
+    'Register runners at the GitHub organization scope and keep them in the HexMaster Landingzone runner group.'
+    'VMSS capacity defaults to zero and is expected to be driven by workflow_job webhook activity.'
+    'Linux runners install Docker so workflows can use container actions and service containers.'
+  ]
 }

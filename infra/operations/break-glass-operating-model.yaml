@@ -16,7 +16,7 @@ connectivity:
 hub_targets:
   - SharedServicesSubnet
   - PrivateEndpointsSubnet
-  - ContainerAppsInfrastructureSubnet
+  - RunnerInfrastructureSubnet
 spoke_reachability:
   required_peering_settings:
     - Hub peering must allow gateway transit.

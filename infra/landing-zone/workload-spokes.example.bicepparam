@@ -19,7 +19,7 @@ param hubNetworkConfig = {
     gateway: '10.20.0.0/24'
     sharedServices: '10.20.1.0/24'
     privateEndpoints: '10.20.2.0/24'
-    containerAppsInfrastructure: '10.20.4.0/23'
+    runnerInfrastructure: '10.20.4.0/23'
   }
   reservedAddressPrefixes: {
     futurePlatformDns: '10.20.3.0/24'
@@ -47,7 +47,7 @@ param operatorConnectivityConfig = {
     allowedTargetSubnets: [
       'sharedServices'
       'privateEndpoints'
-      'containerAppsInfrastructure'
+      'runnerInfrastructure'
     ]
     spokeReachabilityRequirement: 'Spokes that require operator access must peer to the hub with allowGatewayTransit and useRemoteGateways enabled.'
   }

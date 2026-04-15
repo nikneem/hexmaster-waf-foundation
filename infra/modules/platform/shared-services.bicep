@@ -146,7 +146,7 @@ output sharedServices object = {
       'Runner jobs pull images from the central registry with a dedicated managed identity.'
       'This template assumes the ACR already exists in a separate resource group and does not modify its network configuration.'
       'Future workload spokes consume shared images using the existing registry access model rather than landing-zone-managed private endpoints.'
-      'Enable ACR ARM-audience authentication before first runner image pull so Container Apps managed identities can authenticate without admin credentials.'
+      'Enable ACR ARM-audience authentication before first managed-identity image pull so Azure-hosted runner or workload compute can authenticate without admin credentials.'
     ]
   }
   secretVault: {
