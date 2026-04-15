@@ -90,4 +90,12 @@ param runnerExecutionConfig = {
   registrationTokenApiUrl: 'https://api.github.com/orgs/hexmasternl/actions/runners/registration-token'
 }
 
+param observabilityConfig = {
+  enabled: true
+  workspaceSku: 'PerGB2018'
+  retentionInDays: 30
+  dailyQuotaGb: 1
+  logAnalyticsDestinationType: 'Dedicated'
+}
+
 param workloadSpokes = []
