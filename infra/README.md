@@ -10,6 +10,7 @@ This repository now uses a **Bicep-first** layout for the Azure landing zone fou
 - `modules\connectivity\operator-connectivity.bicep` - Point-to-Site VPN gateway and operator access outputs
 - `modules\platform\shared-services.bicep` - hub-hosted shared services including the existing central ACR connectivity, Key Vault, private endpoints, and private DNS
 - `modules\platform\runner-execution.bicep` - VM scale set runner platform, execution identity, and webhook autoscaler Function App
+- `modules\platform\observability.bicep` - shared Log Analytics workspace and foundational shared-service diagnostics baseline
 - `modules\connectivity\workload-spoke.bicep` - standard workload spoke VNet, subnet isolation, and shared-service flow guardrails
 - `landing-zone\workload-spokes.example.bicepparam` - example workload spoke onboarding parameters that align with the reserved spoke supernet
 - `operations\break-glass-operating-model.yaml` - operator break-glass operating model and validation checks
@@ -28,6 +29,7 @@ This scaffold implements OpenSpec tasks:
 - **5.2** runner identities, ACR image pull model, Key Vault secret references, and private connectivity notes for hub-hosted services
 - **6.1** workload spoke VNet pattern, peering model, and address-space onboarding constraints
 - **6.2** workload-to-hub traffic guardrails for shared services access without enabling spoke-to-spoke transit
+- minimal Log Analytics baseline for shared platform diagnostics with low-cost defaults and scoped foundational resource coverage
 
 ## Deployment
 
@@ -105,12 +107,14 @@ az deployment sub show `
 ```
 
 4. If the deployment succeeded but verification indicates a problem, inspect the deployment outputs and the operational artifacts under `infra\operations\`
+5. If the `observabilityBaseline.enabled` output is `true`, open the shared Log Analytics workspace identified in the deployment outputs and review recent platform diagnostics.
 
 ## Connectivity notes
 
 - The hub stays a **platform** network; workloads belong in separate spokes
 - Operator access uses **Point-to-Site VPN** on **VpnGw1AZ** rather than Bastion
 - Private DNS is centralized in the hub using Azure-provided DNS initially, with hub-linked private zones for future services
+- Minimal observability uses a shared Log Analytics workspace in the platform resource group with short retention and a small daily ingestion cap
 - Break-glass reachability to spokes depends on hub-spoke peering with **allowGatewayTransit** and **useRemoteGateways**
 - The shared Key Vault is deployed into the platform resource group, while the existing central ACR (`nvv54gsk4pteu`) in resource group `mvp-int-env` is consumed as an external dependency without landing-zone-managed network changes
 - Runner compute uses a dedicated VM scale set resource group and hub subnet, with separate identities for workload execution and deployment automation
@@ -142,3 +146,42 @@ Before the runner pool can deploy successfully:
 2. Configure a GitHub organization or repository `workflow_job` webhook that targets the Function App URL returned in the landing-zone outputs.
 
 The deployment workflow now also packages and zip-deploys the Function App code under `infra\runner-autoscaler\` after the infrastructure deployment succeeds.
+
+## Observability baseline
+
+The landing zone includes a **minimal** shared Log Analytics baseline for foundational platform diagnostics.
+
+### Scope
+
+- Shared Key Vault diagnostic logs and metrics
+- Point-to-Site VPN gateway diagnostic logs
+- Runner Function App logs and metrics when the runner pool is deployed
+- Runner VM scale set metrics when the runner pool is deployed
+- Runner autoscaler storage account metrics and service logs when the runner pool is deployed
+
+### Low-cost intent
+
+- The baseline is **not** a full monitoring platform
+- Workspace retention defaults to **30 days**
+- Daily ingestion is capped at **1 GB/day** by default
+- Workload spokes are **not** onboarded automatically
+
+### Operator workflow
+
+1. Read the `observabilityBaseline` deployment output to find the workspace name, resource ID, and coverage notes.
+2. Open the workspace **Logs** blade in the Azure portal.
+3. Start with broad queries before drilling into resource-specific tables:
+
+```kusto
+AzureDiagnostics
+| where TimeGenerated > ago(1h)
+| take 50
+```
+
+```kusto
+AzureMetrics
+| where TimeGenerated > ago(1h)
+| take 50
+```
+
+4. Use the workspace as recent operational evidence alongside the what-if, deployment, and verification artifacts from the workflow run.
