@@ -6,7 +6,7 @@ on:
       message:
         description: Optional message to print from the runner.
         required: false
-        default: Hello from the ACA Jobs runner
+        default: Hello from the VMSS runner
         type: string
 
 concurrency:
@@ -18,12 +18,12 @@ permissions:
 
 jobs:
   test-runner:
-    name: Run on ACA runner
+    name: Run on VMSS runner
     runs-on:
       - self-hosted
       - linux
       - x64
-      - aca-job
+      - vmss
     timeout-minutes: 15
 
     steps:
@@ -51,6 +51,6 @@ jobs:
         run: |
           cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
           ## Self-hosted runner test
-
-          The workflow reached the ACA Jobs runner successfully.
+          
+          The workflow reached the VMSS runner successfully.
           EOF

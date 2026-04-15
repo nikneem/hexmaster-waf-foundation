@@ -6,12 +6,14 @@ on:
       - main
     paths:
       - 'infra/**'
+      - 'infra/runner-autoscaler/**'
       - '.github/workflows/deploy-landing-zone.yml'
   push:
     branches:
       - main
     paths:
       - 'infra/**'
+      - 'infra/runner-autoscaler/**'
       - '.github/workflows/deploy-landing-zone.yml'
   workflow_dispatch:
     inputs:
@@ -236,6 +238,53 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+      - name: Resolve runner autoscaler targets
+        id: runner
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          data = json.loads(Path("deployment.json").read_text(encoding="utf-8"))
+          outputs = data.get("properties", {}).get("outputs", {})
+          runner = outputs.get("runnerExecutionPlatform", {}).get("value", {})
+          function_app = runner.get("autoscaler", {}).get("functionApp", {})
+          resource_group = runner.get("resourceGroupName")
+          function_name = function_app.get("name")
+          webhook_url = function_app.get("webhookUrl")
+
+          if resource_group and function_name:
+              with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as handle:
+                  handle.write(f"resource_group={resource_group}\n")
+                  handle.write(f"function_app_name={function_name}\n")
+                  handle.write(f"webhook_url={webhook_url}\n")
+          PY
+
+      - name: Package runner autoscaler
+        if: steps.runner.outputs.function_app_name != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f runner-autoscaler.zip
+          python -m pip install --upgrade pip
+          python -m pip install -r infra/runner-autoscaler/requirements.txt --target infra/runner-autoscaler/.python_packages/lib/site-packages
+          (
+            cd infra/runner-autoscaler
+            zip -rq ../../runner-autoscaler.zip .
+          )
+
+      - name: Deploy runner autoscaler code
+        if: steps.runner.outputs.function_app_name != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          az functionapp deployment source config-zip \
+            --resource-group "${{ steps.runner.outputs.resource_group }}" \
+            --name "${{ steps.runner.outputs.function_app_name }}" \
+            --src runner-autoscaler.zip
+
       - name: Write deployment summary
         shell: bash
         run: |
@@ -246,18 +295,33 @@ jobs:
           data = json.loads(Path("deployment.json").read_text())
           properties = data.get("properties", {})
           outputs = properties.get("outputs", {})
+          runner_resource_group = os.environ.get("RUNNER_AUTOSCALER_RESOURCE_GROUP", "")
+          runner_function_name = os.environ.get("RUNNER_AUTOSCALER_FUNCTION", "")
+          webhook_url = os.environ.get("RUNNER_AUTOSCALER_WEBHOOK_URL", "")
           lines = [
               "## Deployment",
               "",
               f"- Deployment name: `{data.get('name', 'unknown')}`",
               f"- Provisioning state: `{properties.get('provisioningState', 'unknown')}`",
               f"- Output keys: `{', '.join(outputs.keys()) if outputs else 'none'}`",
+              f"- Runner autoscaler deployed: `{'yes' if runner_function_name else 'no'}`",
               "",
               "Deployment output has been uploaded as a workflow artifact."
           ]
+          if runner_resource_group and runner_function_name:
+              lines.extend([
+                  "",
+                  f"- Runner resource group: `{runner_resource_group}`",
+                  f"- Runner autoscaler: `{runner_function_name}`",
+                  f"- GitHub workflow_job webhook URL: `{webhook_url}`",
+              ])
           Path("deployment-summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
           PY
           cat deployment-summary.md >> "$GITHUB_STEP_SUMMARY"
+        env:
+          RUNNER_AUTOSCALER_RESOURCE_GROUP: ${{ steps.runner.outputs.resource_group }}
+          RUNNER_AUTOSCALER_FUNCTION: ${{ steps.runner.outputs.function_app_name }}
+          RUNNER_AUTOSCALER_WEBHOOK_URL: ${{ steps.runner.outputs.webhook_url }}
 
   verify:
     name: Verify deployment
