@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.39.26.7824",
-      "templateHash": "6845295572972634970"
+      "templateHash": "2571447676817759866"
     }
   },
   "parameters": {
@@ -235,7 +235,9 @@
     "logAnalyticsWorkspaceName": "[take(format('law-{0}-{1}', variables('prefix'), variables('locationToken')), 63)]",
     "runnerScaleSetName": "[format('vmss-{0}-github', variables('prefix'))]",
     "runnerExecutionIdentityName": "[format('id-{0}-runner-exec', variables('prefix'))]",
-    "runnerAutoscalerFunctionAppName": "[take(format('func-{0}-runner-{1}', variables('prefix'), variables('locationToken')), 60)]"
+    "runnerAutoscalerFunctionAppName": "[take(format('func-{0}-runner-{1}', variables('prefix'), variables('locationToken')), 60)]",
+    "hasRealRunnerAdminPublicKey": "[and(not(empty(parameters('runnerExecutionConfig').adminPublicKey)), not(contains(parameters('runnerExecutionConfig').adminPublicKey, 'FillInYourPublicKeyBeforeDeployment')))]",
+    "runnerPoolEnabled": "[and(parameters('runnerExecutionConfig').deployRunnerPool, variables('hasRealRunnerAdminPublicKey'))]"
   },
   "resources": [
     {
@@ -2029,7 +2031,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.39.26.7824",
-              "templateHash": "8919831511400891600"
+              "templateHash": "6658847866372632765"
             }
           },
           "parameters": {
@@ -2120,7 +2122,8 @@
               }
             ],
             "virtualMachineContributorRoleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '9980e02c-c2be-4d73-94e8-173b1dc7cf3c')]",
-            "deployRunnerPool": "[and(parameters('runnerExecutionConfig').deployRunnerPool, not(empty(parameters('runnerExecutionConfig').adminPublicKey)))]",
+            "hasRealAdminPublicKey": "[and(not(empty(parameters('runnerExecutionConfig').adminPublicKey)), not(contains(parameters('runnerExecutionConfig').adminPublicKey, 'FillInYourPublicKeyBeforeDeployment')))]",
+            "deployRunnerPool": "[and(parameters('runnerExecutionConfig').deployRunnerPool, variables('hasRealAdminPublicKey'))]",
             "functionPlanName": "[format('plan-{0}', take(replace(parameters('runnerAutoscalerFunctionAppName'), '_', '-'), 36))]",
             "storageAccountName": "[toLower(take(format('st{0}', uniqueString(resourceGroup().id, parameters('runnerAutoscalerFunctionAppName'))), 24))]",
             "targetRepositoriesCsv": "[join(variables('targetRepositories'), ',')]",
@@ -2154,7 +2157,7 @@
                 }
               },
               "properties": {
-                "overprovision": false,
+                "overprovision": true,
                 "upgradePolicy": {
                   "mode": "Manual"
                 },
@@ -2401,6 +2404,7 @@
                 "platformConstraints": [
                   "Register runners at the GitHub organization scope and keep them in the HexMaster Landingzone runner group.",
                   "VMSS capacity defaults to one warm runner and is expected to scale with workflow_job webhook activity.",
+                  "Replace the example SSH public key before enabling the runner pool; placeholder values intentionally keep VM instances from being created.",
                   "Linux runners install Docker so workflows can use container actions and service containers."
                 ]
               }
@@ -2672,7 +2676,7 @@
       ]
     },
     {
-      "condition": "[and(parameters('runnerExecutionConfig').deployRunnerPool, not(empty(parameters('runnerExecutionConfig').adminPublicKey)))]",
+      "condition": "[variables('runnerPoolEnabled')]",
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
       "name": "landing-zone-observability-runner",
@@ -2894,7 +2898,7 @@
       ]
     },
     {
-      "condition": "[and(parameters('runnerExecutionConfig').deployRunnerPool, not(empty(parameters('runnerExecutionConfig').adminPublicKey)))]",
+      "condition": "[variables('runnerPoolEnabled')]",
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
       "name": "runner-execution-key-vault-assignment",
@@ -2969,7 +2973,7 @@
       ]
     },
     {
-      "condition": "[and(parameters('runnerExecutionConfig').deployRunnerPool, not(empty(parameters('runnerExecutionConfig').adminPublicKey)))]",
+      "condition": "[variables('runnerPoolEnabled')]",
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
       "name": "runner-autoscaler-key-vault-assignment",
@@ -3071,7 +3075,7 @@
         "enabled": "[parameters('observabilityConfig').enabled]",
         "workspace": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('platformResourceGroupName')), 'Microsoft.Resources/deployments', 'landing-zone-observability'), '2025-04-01').outputs.workspace.value]",
         "lowCostDefaults": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('platformResourceGroupName')), 'Microsoft.Resources/deployments', 'landing-zone-observability'), '2025-04-01').outputs.lowCostDefaults.value]",
-        "coveredResources": "[if(parameters('observabilityConfig').enabled, concat(createArray('Shared Key Vault', 'Point-to-Site VPN gateway'), if(and(parameters('runnerExecutionConfig').deployRunnerPool, not(empty(parameters('runnerExecutionConfig').adminPublicKey))), createArray('Runner Function App', 'Runner VM scale set metrics', 'Runner autoscaler storage account services'), createArray())), createArray())]",
+        "coveredResources": "[if(parameters('observabilityConfig').enabled, concat(createArray('Shared Key Vault', 'Point-to-Site VPN gateway'), if(variables('runnerPoolEnabled'), createArray('Runner Function App', 'Runner VM scale set metrics', 'Runner autoscaler storage account services'), createArray())), createArray())]",
         "operatorNotes": "[if(parameters('observabilityConfig').enabled, createArray('Use the shared workspace for recent platform diagnostics during deployment verification and break-glass investigation.', 'The baseline is intentionally limited to foundational shared-platform resources and does not onboard workload spokes by default.', 'Runner diagnostics are only enabled when the runner pool is deployed with a real admin SSH key.'), createArray('Minimal observability is disabled for this deployment.'))]"
       }
     },

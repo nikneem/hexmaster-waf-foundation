@@ -147,6 +147,8 @@ Before the runner pool can deploy successfully:
 
 The deployment workflow now also packages and zip-deploys the Function App code under `infra\runner-autoscaler\` after the infrastructure deployment succeeds.
 
+The example parameter file intentionally contains a placeholder SSH public key. The runner pool won't create VM instances until that value is replaced with a real key.
+
 ## Observability baseline
 
 The landing zone includes a **minimal** shared Log Analytics baseline for foundational platform diagnostics.

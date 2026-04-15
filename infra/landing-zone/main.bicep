@@ -147,6 +147,8 @@ var logAnalyticsWorkspaceName = take('law-${prefix}-${locationToken}', 63)
 var runnerScaleSetName = 'vmss-${prefix}-github'
 var runnerExecutionIdentityName = 'id-${prefix}-runner-exec'
 var runnerAutoscalerFunctionAppName = take('func-${prefix}-runner-${locationToken}', 60)
+var hasRealRunnerAdminPublicKey = !empty(runnerExecutionConfig.adminPublicKey) && !contains(runnerExecutionConfig.adminPublicKey, 'FillInYourPublicKeyBeforeDeployment')
+var runnerPoolEnabled = runnerExecutionConfig.deployRunnerPool && hasRealRunnerAdminPublicKey
 var workloadSpokeDefinitions = [for spoke in workloadSpokes: {
   name: spoke.name
   token: toLower(replace(replace(spoke.name, ' ', '-'), '_', '-'))
@@ -342,7 +344,7 @@ module observabilityConnectivityDiagnostics '../modules/platform/observability-c
   ]
 }
 
-module observabilityRunnerDiagnostics '../modules/platform/observability-runner-diagnostics.bicep' = if (runnerExecutionConfig.deployRunnerPool && !empty(runnerExecutionConfig.adminPublicKey)) {
+module observabilityRunnerDiagnostics '../modules/platform/observability-runner-diagnostics.bicep' = if (runnerPoolEnabled) {
   name: 'landing-zone-observability-runner'
   scope: runnerResourceGroup
   params: {
@@ -356,7 +358,7 @@ module observabilityRunnerDiagnostics '../modules/platform/observability-runner-
   }
 }
 
-module runnerExecutionKeyVaultAssignment '../modules/platform/key-vault-secret-reader-assignment.bicep' = if (runnerExecutionConfig.deployRunnerPool && !empty(runnerExecutionConfig.adminPublicKey)) {
+module runnerExecutionKeyVaultAssignment '../modules/platform/key-vault-secret-reader-assignment.bicep' = if (runnerPoolEnabled) {
   name: 'runner-execution-key-vault-assignment'
   scope: platformResourceGroup
   params: {
@@ -366,7 +368,7 @@ module runnerExecutionKeyVaultAssignment '../modules/platform/key-vault-secret-r
   }
 }
 
-module runnerAutoscalerKeyVaultAssignment '../modules/platform/key-vault-secret-reader-assignment.bicep' = if (runnerExecutionConfig.deployRunnerPool && !empty(runnerExecutionConfig.adminPublicKey)) {
+module runnerAutoscalerKeyVaultAssignment '../modules/platform/key-vault-secret-reader-assignment.bicep' = if (runnerPoolEnabled) {
   name: 'runner-autoscaler-key-vault-assignment'
   scope: platformResourceGroup
   params: {
@@ -412,7 +414,7 @@ output observabilityBaseline object = {
   coveredResources: observabilityConfig.enabled ? concat([
     'Shared Key Vault'
     'Point-to-Site VPN gateway'
-  ], runnerExecutionConfig.deployRunnerPool && !empty(runnerExecutionConfig.adminPublicKey) ? [
+  ], runnerPoolEnabled ? [
     'Runner Function App'
     'Runner VM scale set metrics'
     'Runner autoscaler storage account services'
