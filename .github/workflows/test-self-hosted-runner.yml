@@ -1,0 +1,56 @@
+name: Test self-hosted runner
+
+on:
+  workflow_dispatch:
+    inputs:
+      message:
+        description: Optional message to print from the runner.
+        required: false
+        default: Hello from the ACA Jobs runner
+        type: string
+
+concurrency:
+  group: test-self-hosted-runner-${{ github.ref_name }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  test-runner:
+    name: Run on ACA runner
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - aca-job
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Show runner details
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Runner name: $RUNNER_NAME"
+          echo "Runner OS: $RUNNER_OS"
+          echo "Runner arch: $RUNNER_ARCH"
+          echo "Repository: $GITHUB_REPOSITORY"
+          echo "Ref: $GITHUB_REF"
+
+      - name: Print test message
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "${{ github.event.inputs.message }}"
+
+      - name: Write summary
+        shell: bash
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
+          ## Self-hosted runner test
+
+          The workflow reached the ACA Jobs runner successfully.
+          EOF
