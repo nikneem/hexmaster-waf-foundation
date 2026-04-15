@@ -120,13 +120,15 @@ jobs:
 
       - name: Run what-if preview
         shell: bash
+        env:
+          RUNNER_BOOTSTRAP_GITHUB_PAT: ${{ secrets.ADMIN_ORG_PAT }}
         run: |
           set -euo pipefail
           if [[ "$BICEP_PARAMETER_FILE" == *.bicepparam ]]; then
             az deployment sub what-if \
               --name "$DEPLOYMENT_NAME-preview" \
               --location "$AZURE_LOCATION" \
-              --parameters "$BICEP_PARAMETER_FILE" \
+              --parameters "$BICEP_PARAMETER_FILE" runnerBootstrapGitHubPat="$RUNNER_BOOTSTRAP_GITHUB_PAT" \
               --no-pretty-print \
               --result-format FullResourcePayloads \
               --output json > what-if.json
@@ -135,7 +137,7 @@ jobs:
               --name "$DEPLOYMENT_NAME-preview" \
               --location "$AZURE_LOCATION" \
               --template-file "$BICEP_TEMPLATE" \
-              --parameters "@$BICEP_PARAMETER_FILE" \
+              --parameters "@$BICEP_PARAMETER_FILE" runnerBootstrapGitHubPat="$RUNNER_BOOTSTRAP_GITHUB_PAT" \
               --no-pretty-print \
               --result-format FullResourcePayloads \
               --output json > what-if.json
@@ -213,20 +215,22 @@ jobs:
 
       - name: Deploy subscription-scope landing zone
         shell: bash
+        env:
+          RUNNER_BOOTSTRAP_GITHUB_PAT: ${{ secrets.ADMIN_ORG_PAT }}
         run: |
           set -euo pipefail
           if [[ "$BICEP_PARAMETER_FILE" == *.bicepparam ]]; then
             az deployment sub create \
               --name "$DEPLOYMENT_NAME" \
               --location "$AZURE_LOCATION" \
-              --parameters "$BICEP_PARAMETER_FILE" \
+              --parameters "$BICEP_PARAMETER_FILE" runnerBootstrapGitHubPat="$RUNNER_BOOTSTRAP_GITHUB_PAT" \
               --output json > deployment.json
           else
             az deployment sub create \
               --name "$DEPLOYMENT_NAME" \
               --location "$AZURE_LOCATION" \
               --template-file "$BICEP_TEMPLATE" \
-              --parameters "@$BICEP_PARAMETER_FILE" \
+              --parameters "@$BICEP_PARAMETER_FILE" runnerBootstrapGitHubPat="$RUNNER_BOOTSTRAP_GITHUB_PAT" \
               --output json > deployment.json
           fi
 

@@ -138,6 +138,8 @@ Create these secrets in the platform Key Vault:
 - `github-actions-pat` — classic PAT with `admin:org` and `repo` scope
 - `github-webhook-secret` — shared secret used to validate the GitHub `workflow_job` webhook payload
 
+The deployment workflow can seed `github-actions-pat` automatically from the repository secret `ADMIN_ORG_PAT`. The webhook secret still needs to be created in Key Vault separately.
+
 #### VMSS bootstrap requirements
 
 Before the runner pool can deploy and register successfully:

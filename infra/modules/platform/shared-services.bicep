@@ -21,6 +21,13 @@ param containerRegistryResourceGroupName string
 @description('Name of the shared platform Key Vault that stores runner secrets and future platform secrets.')
 param keyVaultName string
 
+@secure()
+@description('Optional GitHub organization PAT value seeded into Key Vault for runner bootstrap.')
+param runnerBootstrapGitHubPat string = ''
+
+@description('Secret name used for the bootstrap GitHub PAT.')
+param runnerBootstrapGitHubPatSecretName string = 'github-actions-pat'
+
 @description('Shared-service hosting configuration for secret storage and consumption of an existing central registry.')
 param sharedServicesConfig object = {
   secretVault: {
@@ -64,6 +71,14 @@ resource platformKeyVault 'Microsoft.KeyVault/vaults@2024-11-01' = {
       ipRules: []
       virtualNetworkRules: []
     }
+  }
+}
+
+resource runnerBootstrapGitHubPatSecret 'Microsoft.KeyVault/vaults/secrets@2024-11-01' = if (!empty(runnerBootstrapGitHubPat)) {
+  parent: platformKeyVault
+  name: runnerBootstrapGitHubPatSecretName
+  properties: {
+    value: runnerBootstrapGitHubPat
   }
 }
 

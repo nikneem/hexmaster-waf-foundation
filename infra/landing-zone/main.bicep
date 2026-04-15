@@ -25,6 +25,10 @@ param platformCostCenter string
 @description('Additional tags merged into the landing-zone resource tags.')
 param tags object = {}
 
+@secure()
+@description('Optional GitHub organization PAT value that the deployment seeds into the shared platform Key Vault.')
+param runnerBootstrapGitHubPat string = ''
+
 @description('Hub platform network configuration, including address planning and DNS baseline metadata.')
 param hubNetworkConfig object = {
   addressPrefixes: [
@@ -292,6 +296,8 @@ module sharedServices '../modules/platform/shared-services.bicep' = {
     containerRegistryName: containerRegistryName
     containerRegistryResourceGroupName: containerRegistryResourceGroupName
     keyVaultName: platformKeyVaultName
+    runnerBootstrapGitHubPat: runnerBootstrapGitHubPat
+    runnerBootstrapGitHubPatSecretName: runnerExecutionConfig.githubPatSecretName
     sharedServicesConfig: sharedServicesConfig
   }
 }

@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.39.26.7824",
-      "templateHash": "1930247401807839182"
+      "templateHash": "290868304064405056"
     }
   },
   "parameters": {
@@ -52,6 +52,13 @@
       "defaultValue": {},
       "metadata": {
         "description": "Additional tags merged into the landing-zone resource tags."
+      }
+    },
+    "runnerBootstrapGitHubPat": {
+      "type": "securestring",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Optional GitHub organization PAT value that the deployment seeds into the shared platform Key Vault."
       }
     },
     "hubNetworkConfig": {
@@ -1758,6 +1765,12 @@
           "keyVaultName": {
             "value": "[variables('platformKeyVaultName')]"
           },
+          "runnerBootstrapGitHubPat": {
+            "value": "[parameters('runnerBootstrapGitHubPat')]"
+          },
+          "runnerBootstrapGitHubPatSecretName": {
+            "value": "[parameters('runnerExecutionConfig').githubPatSecretName]"
+          },
           "sharedServicesConfig": {
             "value": "[parameters('sharedServicesConfig')]"
           }
@@ -1769,7 +1782,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.39.26.7824",
-              "templateHash": "2232553344403147172"
+              "templateHash": "3653168851440278895"
             }
           },
           "parameters": {
@@ -1814,6 +1827,20 @@
               "type": "string",
               "metadata": {
                 "description": "Name of the shared platform Key Vault that stores runner secrets and future platform secrets."
+              }
+            },
+            "runnerBootstrapGitHubPat": {
+              "type": "securestring",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Optional GitHub organization PAT value seeded into Key Vault for runner bootstrap."
+              }
+            },
+            "runnerBootstrapGitHubPatSecretName": {
+              "type": "string",
+              "defaultValue": "github-actions-pat",
+              "metadata": {
+                "description": "Secret name used for the bootstrap GitHub PAT."
               }
             },
             "sharedServicesConfig": {
@@ -1863,6 +1890,18 @@
                   "virtualNetworkRules": []
                 }
               }
+            },
+            {
+              "condition": "[not(empty(parameters('runnerBootstrapGitHubPat')))]",
+              "type": "Microsoft.KeyVault/vaults/secrets",
+              "apiVersion": "2024-11-01",
+              "name": "[format('{0}/{1}', parameters('keyVaultName'), parameters('runnerBootstrapGitHubPatSecretName'))]",
+              "properties": {
+                "value": "[parameters('runnerBootstrapGitHubPat')]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName'))]"
+              ]
             },
             {
               "type": "Microsoft.Network/privateDnsZones",
