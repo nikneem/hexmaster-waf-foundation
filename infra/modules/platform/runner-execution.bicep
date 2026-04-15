@@ -49,8 +49,7 @@ param runnerExecutionConfig object = {
 }
 
 var virtualMachineContributorRoleDefinitionId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '9980e02c-c2be-4d73-94e8-173b1dc7cf3c')
-var hasRealAdminPublicKey = !empty(runnerExecutionConfig.adminPublicKey) && !contains(runnerExecutionConfig.adminPublicKey, 'FillInYourPublicKeyBeforeDeployment')
-var deployRunnerPool = runnerExecutionConfig.deployRunnerPool && hasRealAdminPublicKey
+var deployRunnerPool = runnerExecutionConfig.deployRunnerPool && !empty(runnerExecutionConfig.adminPublicKey)
 var functionPlanName = 'plan-${take(replace(runnerAutoscalerFunctionAppName, '_', '-'), 36)}'
 var storageAccountName = toLower(take('st${uniqueString(resourceGroup().id, runnerAutoscalerFunctionAppName)}', 24))
 var patSecretUri = '${platformKeyVault.properties.vaultUri}secrets/${runnerExecutionConfig.githubPatSecretName}'
@@ -330,7 +329,6 @@ output runnerPlatform object = {
   platformConstraints: [
     'Register runners at the GitHub organization scope and keep them in the HexMaster Landingzone runner group.'
     'VMSS capacity defaults to one warm runner and is expected to scale with workflow_job webhook activity.'
-    'Replace the example SSH public key before enabling the runner pool; placeholder values intentionally keep VM instances from being created.'
     'Linux runners install Docker so workflows can use container actions and service containers.'
   ]
 }

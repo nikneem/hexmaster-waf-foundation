@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.39.26.7824",
-      "templateHash": "2571447676817759866"
+      "templateHash": "13381522662963973411"
     }
   },
   "parameters": {
@@ -236,8 +236,7 @@
     "runnerScaleSetName": "[format('vmss-{0}-github', variables('prefix'))]",
     "runnerExecutionIdentityName": "[format('id-{0}-runner-exec', variables('prefix'))]",
     "runnerAutoscalerFunctionAppName": "[take(format('func-{0}-runner-{1}', variables('prefix'), variables('locationToken')), 60)]",
-    "hasRealRunnerAdminPublicKey": "[and(not(empty(parameters('runnerExecutionConfig').adminPublicKey)), not(contains(parameters('runnerExecutionConfig').adminPublicKey, 'FillInYourPublicKeyBeforeDeployment')))]",
-    "runnerPoolEnabled": "[and(parameters('runnerExecutionConfig').deployRunnerPool, variables('hasRealRunnerAdminPublicKey'))]"
+    "runnerPoolEnabled": "[and(parameters('runnerExecutionConfig').deployRunnerPool, not(empty(parameters('runnerExecutionConfig').adminPublicKey)))]"
   },
   "resources": [
     {
@@ -2031,7 +2030,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.39.26.7824",
-              "templateHash": "6658847866372632765"
+              "templateHash": "10556349368749851690"
             }
           },
           "parameters": {
@@ -2122,8 +2121,7 @@
               }
             ],
             "virtualMachineContributorRoleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '9980e02c-c2be-4d73-94e8-173b1dc7cf3c')]",
-            "hasRealAdminPublicKey": "[and(not(empty(parameters('runnerExecutionConfig').adminPublicKey)), not(contains(parameters('runnerExecutionConfig').adminPublicKey, 'FillInYourPublicKeyBeforeDeployment')))]",
-            "deployRunnerPool": "[and(parameters('runnerExecutionConfig').deployRunnerPool, variables('hasRealAdminPublicKey'))]",
+            "deployRunnerPool": "[and(parameters('runnerExecutionConfig').deployRunnerPool, not(empty(parameters('runnerExecutionConfig').adminPublicKey)))]",
             "functionPlanName": "[format('plan-{0}', take(replace(parameters('runnerAutoscalerFunctionAppName'), '_', '-'), 36))]",
             "storageAccountName": "[toLower(take(format('st{0}', uniqueString(resourceGroup().id, parameters('runnerAutoscalerFunctionAppName'))), 24))]",
             "targetRepositoriesCsv": "[join(variables('targetRepositories'), ',')]",
@@ -2404,7 +2402,6 @@
                 "platformConstraints": [
                   "Register runners at the GitHub organization scope and keep them in the HexMaster Landingzone runner group.",
                   "VMSS capacity defaults to one warm runner and is expected to scale with workflow_job webhook activity.",
-                  "Replace the example SSH public key before enabling the runner pool; placeholder values intentionally keep VM instances from being created.",
                   "Linux runners install Docker so workflows can use container actions and service containers."
                 ]
               }

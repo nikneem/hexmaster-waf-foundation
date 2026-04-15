@@ -147,8 +147,7 @@ var logAnalyticsWorkspaceName = take('law-${prefix}-${locationToken}', 63)
 var runnerScaleSetName = 'vmss-${prefix}-github'
 var runnerExecutionIdentityName = 'id-${prefix}-runner-exec'
 var runnerAutoscalerFunctionAppName = take('func-${prefix}-runner-${locationToken}', 60)
-var hasRealRunnerAdminPublicKey = !empty(runnerExecutionConfig.adminPublicKey) && !contains(runnerExecutionConfig.adminPublicKey, 'FillInYourPublicKeyBeforeDeployment')
-var runnerPoolEnabled = runnerExecutionConfig.deployRunnerPool && hasRealRunnerAdminPublicKey
+var runnerPoolEnabled = runnerExecutionConfig.deployRunnerPool && !empty(runnerExecutionConfig.adminPublicKey)
 var workloadSpokeDefinitions = [for spoke in workloadSpokes: {
   name: spoke.name
   token: toLower(replace(replace(spoke.name, ' ', '-'), '_', '-'))

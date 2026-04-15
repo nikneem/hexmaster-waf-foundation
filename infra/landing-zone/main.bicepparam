@@ -82,7 +82,7 @@ param runnerExecutionConfig = {
   vmSku: 'Standard_D2as_v5'
   osDiskSizeGb: 64
   adminUsername: 'runneradmin'
-  adminPublicKey: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFillInYourPublicKeyBeforeDeployment runneradmin@example'
+  adminPublicKey: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN2r9UNWt105Ey7KDf4ZZ85B5PGCA//FIe52EvL2nO0S runneradmin@hexmaster-lz'
   minRunners: 1
   maxRunners: 10
   githubPatSecretName: 'github-actions-pat'
