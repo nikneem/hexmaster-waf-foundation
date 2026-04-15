@@ -252,18 +252,20 @@ jobs:
           runner = outputs.get("runnerExecutionPlatform", {}).get("value", {})
           function_app = runner.get("autoscaler", {}).get("functionApp", {})
           resource_group = runner.get("resourceGroupName")
+          function_resource_id = function_app.get("resourceId")
           function_name = function_app.get("name")
           webhook_url = function_app.get("webhookUrl")
 
-          if resource_group and function_name:
+          if resource_group and function_name and function_resource_id:
               with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as handle:
                   handle.write(f"resource_group={resource_group}\n")
                   handle.write(f"function_app_name={function_name}\n")
+                  handle.write(f"function_app_resource_id={function_resource_id}\n")
                   handle.write(f"webhook_url={webhook_url}\n")
           PY
 
       - name: Package runner autoscaler
-        if: steps.runner.outputs.function_app_name != ''
+        if: steps.runner.outputs.function_app_resource_id != ''
         shell: bash
         run: |
           set -euo pipefail
@@ -276,7 +278,7 @@ jobs:
           )
 
       - name: Deploy runner autoscaler code
-        if: steps.runner.outputs.function_app_name != ''
+        if: steps.runner.outputs.function_app_resource_id != ''
         shell: bash
         run: |
           set -euo pipefail
