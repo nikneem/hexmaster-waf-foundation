@@ -300,6 +300,15 @@ module runnerExecution '../modules/platform/runner-execution.bicep' = {
   ]
 }
 
+module runnerRegistryAccess '../modules/platform/acr-pull-assignment.bicep' = {
+  name: 'runner-registry-access'
+  scope: resourceGroup(containerRegistryResourceGroupName)
+  params: {
+    containerRegistryName: containerRegistryName
+    principalId: runnerExecution.outputs.runnerPlatform.identities.registryPull.principalId
+  }
+}
+
 var deployedWorkloadSpokes = [for spoke in workloadSpokeDefinitions: {
   name: spoke.name
   resourceGroupName: spoke.resourceGroupName

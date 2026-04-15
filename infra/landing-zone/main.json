@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.39.26.7824",
-      "templateHash": "13165135264157789102"
+      "templateHash": "9107399602800256645"
     }
   },
   "parameters": {
@@ -219,6 +219,7 @@
     "vpnGatewayName": "[format('vpngw-{0}-{1}', variables('prefix'), variables('locationToken'))]",
     "containerAppsEnvironmentName": "[format('cae-{0}-{1}', variables('prefix'), variables('locationToken'))]",
     "containerRegistryName": "nvv54gsk4pteu",
+    "containerRegistryResourceGroupName": "mvp-int-env",
     "platformKeyVaultName": "[take(format('kv-{0}-{1}', variables('prefix'), variables('locationToken')), 24)]",
     "runnerJobName": "[format('job-{0}-github', variables('prefix'))]",
     "runnerExecutionIdentityName": "[format('id-{0}-runner-exec', variables('prefix'))]",
@@ -1697,6 +1698,9 @@
           "containerRegistryName": {
             "value": "[variables('containerRegistryName')]"
           },
+          "containerRegistryResourceGroupName": {
+            "value": "[variables('containerRegistryResourceGroupName')]"
+          },
           "keyVaultName": {
             "value": "[variables('platformKeyVaultName')]"
           },
@@ -1711,7 +1715,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.39.26.7824",
-              "templateHash": "17099341158692382200"
+              "templateHash": "18115289607749852940"
             }
           },
           "parameters": {
@@ -1744,6 +1748,12 @@
               "type": "string",
               "metadata": {
                 "description": "Name of the central Azure Container Registry."
+              }
+            },
+            "containerRegistryResourceGroupName": {
+              "type": "string",
+              "metadata": {
+                "description": "Resource group containing the existing central Azure Container Registry."
               }
             },
             "keyVaultName": {
@@ -1858,7 +1868,7 @@
                   {
                     "name": "acr-registry",
                     "properties": {
-                      "privateLinkServiceId": "[resourceId('Microsoft.ContainerRegistry/registries', parameters('containerRegistryName'))]",
+                      "privateLinkServiceId": "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('containerRegistryResourceGroupName')), 'Microsoft.ContainerRegistry/registries', parameters('containerRegistryName'))]",
                       "groupIds": [
                         "registry"
                       ]
@@ -1949,10 +1959,10 @@
                 },
                 "containerRegistry": {
                   "name": "[parameters('containerRegistryName')]",
-                  "id": "[resourceId('Microsoft.ContainerRegistry/registries', parameters('containerRegistryName'))]",
-                  "loginServer": "[reference(resourceId('Microsoft.ContainerRegistry/registries', parameters('containerRegistryName')), '2025-04-01').loginServer]",
-                  "sku": "[reference(resourceId('Microsoft.ContainerRegistry/registries', parameters('containerRegistryName')), '2025-04-01', 'full').sku.name]",
-                  "publicNetworkAccess": "[reference(resourceId('Microsoft.ContainerRegistry/registries', parameters('containerRegistryName')), '2025-04-01').publicNetworkAccess]",
+                  "id": "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('containerRegistryResourceGroupName')), 'Microsoft.ContainerRegistry/registries', parameters('containerRegistryName'))]",
+                  "loginServer": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('containerRegistryResourceGroupName')), 'Microsoft.ContainerRegistry/registries', parameters('containerRegistryName')), '2025-04-01').loginServer]",
+                  "sku": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('containerRegistryResourceGroupName')), 'Microsoft.ContainerRegistry/registries', parameters('containerRegistryName')), '2025-04-01', 'full').sku.name]",
+                  "publicNetworkAccess": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('containerRegistryResourceGroupName')), 'Microsoft.ContainerRegistry/registries', parameters('containerRegistryName')), '2025-04-01').publicNetworkAccess]",
                   "privateEndpointId": "[resourceId('Microsoft.Network/privateEndpoints', format('pep-{0}', parameters('containerRegistryName')))]",
                   "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.azurecr.io')]",
                   "imageConsumptionPattern": [
@@ -2016,6 +2026,9 @@
           "containerRegistryName": {
             "value": "[variables('containerRegistryName')]"
           },
+          "containerRegistryResourceGroupName": {
+            "value": "[variables('containerRegistryResourceGroupName')]"
+          },
           "keyVaultName": {
             "value": "[variables('platformKeyVaultName')]"
           },
@@ -2033,7 +2046,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.39.26.7824",
-              "templateHash": "15791837554495608675"
+              "templateHash": "3860228309085616845"
             }
           },
           "parameters": {
@@ -2077,7 +2090,13 @@
             "containerRegistryName": {
               "type": "string",
               "metadata": {
-                "description": "Name of the central Azure Container Registry in this resource group."
+                "description": "Name of the central Azure Container Registry."
+              }
+            },
+            "containerRegistryResourceGroupName": {
+              "type": "string",
+              "metadata": {
+                "description": "Resource group containing the existing central Azure Container Registry."
               }
             },
             "keyVaultName": {
@@ -2124,7 +2143,6 @@
             }
           },
           "variables": {
-            "acrPullRoleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')]",
             "keyVaultSecretsUserRoleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-408a-b874-0445c86b69e6')]",
             "deployRunnerJob": "[and(and(and(parameters('runnerExecutionConfig').deployRunnerJob, not(empty(parameters('runnerExecutionConfig').githubUrl))), not(empty(parameters('runnerExecutionConfig').registrationTokenApiUrl))), not(empty(parameters('runnerExecutionConfig').githubPatSecretUri)))]"
           },
@@ -2155,20 +2173,6 @@
                   "internal": true
                 }
               }
-            },
-            {
-              "type": "Microsoft.Authorization/roleAssignments",
-              "apiVersion": "2022-04-01",
-              "scope": "[format('Microsoft.ContainerRegistry/registries/{0}', parameters('containerRegistryName'))]",
-              "name": "[guid(resourceId('Microsoft.ContainerRegistry/registries', parameters('containerRegistryName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('runnerRegistryIdentityName')), 'runner-acr-pull')]",
-              "properties": {
-                "roleDefinitionId": "[variables('acrPullRoleDefinitionId')]",
-                "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('runnerRegistryIdentityName')), '2024-11-30').principalId]",
-                "principalType": "ServicePrincipal"
-              },
-              "dependsOn": [
-                "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('runnerRegistryIdentityName'))]"
-              ]
             },
             {
               "type": "Microsoft.Authorization/roleAssignments",
@@ -2206,7 +2210,7 @@
                   "replicaRetryLimit": "[parameters('runnerExecutionConfig').replicaRetryLimit]",
                   "registries": [
                     {
-                      "server": "[reference(resourceId('Microsoft.ContainerRegistry/registries', parameters('containerRegistryName')), '2025-04-01').loginServer]",
+                      "server": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('containerRegistryResourceGroupName')), 'Microsoft.ContainerRegistry/registries', parameters('containerRegistryName')), '2025-04-01').loginServer]",
                       "identity": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('runnerRegistryIdentityName'))]"
                     }
                   ],
@@ -2250,7 +2254,7 @@
                   "containers": [
                     {
                       "name": "github-runner",
-                      "image": "[format('{0}/{1}:{2}', reference(resourceId('Microsoft.ContainerRegistry/registries', parameters('containerRegistryName')), '2025-04-01').loginServer, parameters('runnerExecutionConfig').imageRepository, parameters('runnerExecutionConfig').imageTag)]",
+                      "image": "[format('{0}/{1}:{2}', reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('containerRegistryResourceGroupName')), 'Microsoft.ContainerRegistry/registries', parameters('containerRegistryName')), '2025-04-01').loginServer, parameters('runnerExecutionConfig').imageRepository, parameters('runnerExecutionConfig').imageTag)]",
                       "env": [
                         {
                           "name": "GITHUB_PAT",
@@ -2303,9 +2307,7 @@
                     "name": "[parameters('runnerRegistryIdentityName')]",
                     "resourceId": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('runnerRegistryIdentityName'))]",
                     "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('runnerRegistryIdentityName')), '2024-11-30').principalId]",
-                    "roleAssignments": [
-                      "[extensionResourceId(resourceId('Microsoft.ContainerRegistry/registries', parameters('containerRegistryName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.ContainerRegistry/registries', parameters('containerRegistryName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('runnerRegistryIdentityName')), 'runner-acr-pull'))]"
-                    ]
+                    "roleAssignments": []
                   },
                   "execution": {
                     "name": "[parameters('runnerExecutionIdentityName')]",
@@ -2321,7 +2323,7 @@
                   "name": "[parameters('runnerJobName')]",
                   "deploymentEnabled": "[variables('deployRunnerJob')]",
                   "triggerType": "Event",
-                  "image": "[format('{0}/{1}:{2}', reference(resourceId('Microsoft.ContainerRegistry/registries', parameters('containerRegistryName')), '2025-04-01').loginServer, parameters('runnerExecutionConfig').imageRepository, parameters('runnerExecutionConfig').imageTag)]",
+                  "image": "[format('{0}/{1}:{2}', reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('containerRegistryResourceGroupName')), 'Microsoft.ContainerRegistry/registries', parameters('containerRegistryName')), '2025-04-01').loginServer, parameters('runnerExecutionConfig').imageRepository, parameters('runnerExecutionConfig').imageTag)]",
                   "githubApiUrl": "[parameters('runnerExecutionConfig').githubApiUrl]",
                   "githubUrl": "[parameters('runnerExecutionConfig').githubUrl]",
                   "runnerScope": "[parameters('runnerExecutionConfig').runnerScope]",
@@ -2353,6 +2355,76 @@
         "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('connectivityResourceGroupName')), 'Microsoft.Resources/deployments', 'hub-network-foundation')]",
         "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('platformResourceGroupName'))]",
         "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('platformResourceGroupName')), 'Microsoft.Resources/deployments', 'shared-platform-services')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "runner-registry-access",
+      "resourceGroup": "[variables('containerRegistryResourceGroupName')]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "containerRegistryName": {
+            "value": "[variables('containerRegistryName')]"
+          },
+          "principalId": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('platformResourceGroupName')), 'Microsoft.Resources/deployments', 'runner-execution-platform'), '2025-04-01').outputs.runnerPlatform.value.identities.registryPull.principalId]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.39.26.7824",
+              "templateHash": "14625587641861868814"
+            }
+          },
+          "parameters": {
+            "containerRegistryName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the existing Azure Container Registry."
+              }
+            },
+            "principalId": {
+              "type": "string",
+              "metadata": {
+                "description": "Principal ID of the managed identity that needs AcrPull on the registry."
+              }
+            }
+          },
+          "variables": {
+            "acrPullRoleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')]"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[format('Microsoft.ContainerRegistry/registries/{0}', parameters('containerRegistryName'))]",
+              "name": "[guid(resourceId('Microsoft.ContainerRegistry/registries', parameters('containerRegistryName')), parameters('principalId'), 'runner-acr-pull')]",
+              "properties": {
+                "roleDefinitionId": "[variables('acrPullRoleDefinitionId')]",
+                "principalId": "[parameters('principalId')]",
+                "principalType": "ServicePrincipal"
+              }
+            }
+          ],
+          "outputs": {
+            "roleAssignmentId": {
+              "type": "string",
+              "value": "[extensionResourceId(resourceId('Microsoft.ContainerRegistry/registries', parameters('containerRegistryName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.ContainerRegistry/registries', parameters('containerRegistryName')), parameters('principalId'), 'runner-acr-pull'))]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('platformResourceGroupName')), 'Microsoft.Resources/deployments', 'runner-execution-platform')]"
       ]
     }
   ],

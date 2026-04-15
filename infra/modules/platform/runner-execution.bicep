@@ -56,7 +56,6 @@ param runnerExecutionConfig object = {
   registrationTokenApiUrl: 'https://api.github.com/orgs/hexmasternl/actions/runners/registration-token'
 }
 
-var acrPullRoleDefinitionId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')
 var keyVaultSecretsUserRoleDefinitionId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-408a-b874-0445c86b69e6')
 var deployRunnerJob = runnerExecutionConfig.deployRunnerJob && !empty(runnerExecutionConfig.githubUrl) && !empty(runnerExecutionConfig.registrationTokenApiUrl) && !empty(runnerExecutionConfig.githubPatSecretUri)
 var runnerImage = '${containerRegistry.properties.loginServer}/${runnerExecutionConfig.imageRepository}:${runnerExecutionConfig.imageTag}'
@@ -91,16 +90,6 @@ resource containerAppsEnvironment 'Microsoft.App/managedEnvironments@2025-01-01'
       infrastructureSubnetId: infrastructureSubnetId
       internal: true
     }
-  }
-}
-
-resource runnerRegistryAcrPullAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(containerRegistry.id, runnerRegistryIdentity.id, 'runner-acr-pull')
-  scope: containerRegistry
-  properties: {
-    roleDefinitionId: acrPullRoleDefinitionId
-    principalId: runnerRegistryIdentity.properties.principalId
-    principalType: 'ServicePrincipal'
   }
 }
 
@@ -222,9 +211,7 @@ output runnerPlatform object = {
       name: runnerRegistryIdentity.name
       resourceId: runnerRegistryIdentity.id
       principalId: runnerRegistryIdentity.properties.principalId
-      roleAssignments: [
-        runnerRegistryAcrPullAssignment.id
-      ]
+      roleAssignments: []
     }
     execution: {
       name: runnerExecutionIdentity.name
