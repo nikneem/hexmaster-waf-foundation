@@ -109,6 +109,15 @@ param runnerExecutionConfig object = {
   registrationTokenApiUrl: 'https://api.github.com/orgs/hexmasternl/actions/runners/registration-token'
 }
 
+@description('Minimal observability baseline configuration for the shared Log Analytics workspace and foundational diagnostics.')
+param observabilityConfig object = {
+  enabled: true
+  workspaceSku: 'PerGB2018'
+  retentionInDays: 30
+  dailyQuotaGb: 1
+  logAnalyticsDestinationType: 'Dedicated'
+}
+
 @description('Optional workload spoke definitions. Each spoke must use non-overlapping prefixes carved from hubNetworkConfig.futureSpokeSupernet and reserve room for workload, private endpoint, and future growth subnets.')
 param workloadSpokes array = []
 
@@ -134,6 +143,7 @@ var vpnGatewayName = 'vpngw-${prefix}-${locationToken}'
 var containerRegistryName = 'nvv54gsk4pteu'
 var containerRegistryResourceGroupName = 'mvp-int-env'
 var platformKeyVaultName = take('kv-${prefix}-${locationToken}', 24)
+var logAnalyticsWorkspaceName = take('law-${prefix}-${locationToken}', 63)
 var runnerScaleSetName = 'vmss-${prefix}-github'
 var runnerExecutionIdentityName = 'id-${prefix}-runner-exec'
 var runnerAutoscalerFunctionAppName = take('func-${prefix}-runner-${locationToken}', 60)
@@ -304,6 +314,48 @@ module runnerExecution '../modules/platform/runner-execution.bicep' = {
   ]
 }
 
+module observability '../modules/platform/observability.bicep' = {
+  name: 'landing-zone-observability'
+  scope: platformResourceGroup
+  params: {
+    location: primaryLocation
+    tags: requiredTags
+    workspaceName: logAnalyticsWorkspaceName
+    observabilityConfig: observabilityConfig
+    keyVaultName: platformKeyVaultName
+  }
+  dependsOn: [
+    sharedServices
+  ]
+}
+
+module observabilityConnectivityDiagnostics '../modules/platform/observability-connectivity-diagnostics.bicep' = {
+  name: 'landing-zone-observability-connectivity'
+  scope: connectivityResourceGroup
+  params: {
+    workspaceId: observability.outputs.workspace.id
+    observabilityConfig: observabilityConfig
+    virtualNetworkGatewayName: vpnGatewayName
+  }
+  dependsOn: [
+    operatorConnectivity
+  ]
+}
+
+module observabilityRunnerDiagnostics '../modules/platform/observability-runner-diagnostics.bicep' = if (runnerExecutionConfig.deployRunnerPool && !empty(runnerExecutionConfig.adminPublicKey)) {
+  name: 'landing-zone-observability-runner'
+  scope: runnerResourceGroup
+  params: {
+    workspaceId: observability.outputs.workspace.id
+    observabilityConfig: observabilityConfig
+    runnerDiagnostics: {
+      vmScaleSetName: runnerExecution.outputs.runnerPlatform.vmScaleSet.name
+      functionAppName: runnerExecution.outputs.runnerPlatform.autoscaler.functionApp.name
+      autoscalerStorageAccountName: runnerExecution.outputs.runnerPlatform.autoscaler.storageAccount.name
+    }
+  }
+}
+
 module runnerExecutionKeyVaultAssignment '../modules/platform/key-vault-secret-reader-assignment.bicep' = if (runnerExecutionConfig.deployRunnerPool && !empty(runnerExecutionConfig.adminPublicKey)) {
   name: 'runner-execution-key-vault-assignment'
   scope: platformResourceGroup
@@ -353,6 +405,26 @@ output hubNetworkFoundation object = hubNetwork.outputs.foundation
 output operatorConnectivity object = operatorConnectivity.outputs.connectivity
 output sharedPlatformServices object = sharedServices.outputs.sharedServices
 output runnerExecutionPlatform object = runnerExecution.outputs.runnerPlatform
+output observabilityBaseline object = {
+  enabled: observabilityConfig.enabled
+  workspace: observability.outputs.workspace
+  lowCostDefaults: observability.outputs.lowCostDefaults
+  coveredResources: observabilityConfig.enabled ? concat([
+    'Shared Key Vault'
+    'Point-to-Site VPN gateway'
+  ], runnerExecutionConfig.deployRunnerPool && !empty(runnerExecutionConfig.adminPublicKey) ? [
+    'Runner Function App'
+    'Runner VM scale set metrics'
+    'Runner autoscaler storage account services'
+  ] : []) : []
+  operatorNotes: observabilityConfig.enabled ? [
+    'Use the shared workspace for recent platform diagnostics during deployment verification and break-glass investigation.'
+    'The baseline is intentionally limited to foundational shared-platform resources and does not onboard workload spokes by default.'
+    'Runner diagnostics are only enabled when the runner pool is deployed with a real admin SSH key.'
+  ] : [
+    'Minimal observability is disabled for this deployment.'
+  ]
+}
 output workloadSpokeNetworking object = {
   standard: {
     addressSupernet: hubNetworkConfig.futureSpokeSupernet
