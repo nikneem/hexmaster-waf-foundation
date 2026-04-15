@@ -292,6 +292,7 @@ jobs:
         run: |
           python - <<'PY'
           import json
+          import os
           from pathlib import Path
 
           data = json.loads(Path("deployment.json").read_text())
