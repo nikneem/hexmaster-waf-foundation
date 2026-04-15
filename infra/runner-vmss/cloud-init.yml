@@ -36,35 +36,75 @@ write_files:
       KEY_VAULT_URI="__KEY_VAULT_URI__"
       GITHUB_PAT_SECRET_NAME="__GITHUB_PAT_SECRET_NAME__"
       REGISTRATION_TOKEN_API_URL="__REGISTRATION_TOKEN_API_URL__"
+      MANAGED_IDENTITY_CLIENT_ID="__MANAGED_IDENTITY_CLIENT_ID__"
+
+      log() { echo "[$(date -u '+%Y-%m-%dT%H:%M:%SZ')] $*"; }
+
+      log "Starting GitHub Actions runner bootstrap (version ${RUNNER_VERSION})"
 
       mkdir -p "$RUNNER_HOME"
       chown -R runner:runner "$RUNNER_HOME"
 
       if [ ! -f "$RUNNER_HOME/config.sh" ]; then
+        log "Downloading runner binary v${RUNNER_VERSION}..."
         archive_name="actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz"
         runner_url="https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/${archive_name}"
         su - runner -c "cd \"$RUNNER_HOME\" && curl -fsSL \"$runner_url\" -o \"$archive_name\" && tar xzf \"$archive_name\" && rm -f \"$archive_name\""
+        log "Installing runner dependencies..."
         bash "$RUNNER_HOME/bin/installdependencies.sh"
       fi
 
-      token_response=$(curl -fsSL -H Metadata:true "http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https://vault.azure.net")
+      log "Requesting IMDS token for Key Vault (client_id=${MANAGED_IDENTITY_CLIENT_ID})..."
+      token_response=$(curl -fsSL -H Metadata:true \
+        "http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https://vault.azure.net&client_id=${MANAGED_IDENTITY_CLIENT_ID}")
       key_vault_token=$(echo "$token_response" | jq -r '.access_token')
-      github_pat=$(curl -fsSL -H "Authorization: Bearer ${key_vault_token}" "${KEY_VAULT_URI}secrets/${GITHUB_PAT_SECRET_NAME}?api-version=7.4" | jq -r '.value')
+
+      if [ -z "$key_vault_token" ] || [ "$key_vault_token" = "null" ]; then
+        log "ERROR: Failed to obtain Key Vault access token from IMDS."
+        log "Response: $token_response"
+        exit 1
+      fi
+      log "Key Vault token acquired."
+
+      log "Fetching GitHub PAT from Key Vault secret '${GITHUB_PAT_SECRET_NAME}'..."
+      kv_response=$(curl -sSL -w "\n%{http_code}" -H "Authorization: Bearer ${key_vault_token}" \
+        "${KEY_VAULT_URI}secrets/${GITHUB_PAT_SECRET_NAME}?api-version=7.4")
+      kv_http_code=$(echo "$kv_response" | tail -1)
+      kv_body=$(echo "$kv_response" | sed '$d')
+      github_pat=$(echo "$kv_body" | jq -r '.value')
+
+      if [ "$kv_http_code" != "200" ]; then
+        log "ERROR: Key Vault returned HTTP ${kv_http_code}. Does secret '${GITHUB_PAT_SECRET_NAME}' exist?"
+        log "Response: $kv_body"
+        exit 1
+      fi
 
       if [ -z "$github_pat" ] || [ "$github_pat" = "null" ]; then
-        echo "Failed to resolve GitHub PAT from Key Vault."
+        log "ERROR: GitHub PAT value is empty or null."
         exit 1
       fi
+      log "GitHub PAT retrieved."
 
-      registration_token=$(curl -fsSL -X POST \
+      log "Requesting runner registration token from GitHub..."
+      reg_response=$(curl -sSL -w "\n%{http_code}" -X POST \
         -H "Authorization: token ${github_pat}" \
         -H "Accept: application/vnd.github+json" \
-        "${REGISTRATION_TOKEN_API_URL}" | jq -r '.token')
+        "${REGISTRATION_TOKEN_API_URL}")
+      reg_http_code=$(echo "$reg_response" | tail -1)
+      reg_body=$(echo "$reg_response" | sed '$d')
+      registration_token=$(echo "$reg_body" | jq -r '.token')
 
-      if [ -z "$registration_token" ] || [ "$registration_token" = "null" ]; then
-        echo "Failed to obtain a GitHub runner registration token."
+      if [ "$reg_http_code" != "201" ]; then
+        log "ERROR: GitHub API returned HTTP ${reg_http_code}. Check PAT scopes (needs admin:org)."
+        log "Response: $reg_body"
         exit 1
       fi
+
+      if [ -z "$registration_token" ] || [ "$registration_token" = "null" ]; then
+        log "ERROR: Registration token is empty or null."
+        exit 1
+      fi
+      log "Registration token acquired."
 
       rm -f \
         "$RUNNER_HOME/.runner" \
@@ -72,7 +112,9 @@ write_files:
         "$RUNNER_HOME/.credentials_rsaparams" \
         "$RUNNER_HOME/.env"
 
+      log "Configuring runner (group=${RUNNER_GROUP}, labels=${RUNNER_LABELS})..."
       su - runner -c "cd \"$RUNNER_HOME\" && ./config.sh --url \"$GITHUB_URL\" --token \"$registration_token\" --runnergroup \"$RUNNER_GROUP\" --labels \"$RUNNER_LABELS\" --name \"vmss-$(hostname)\" --work _work --unattended --ephemeral --replace"
+      log "Runner configured. Starting run.sh..."
       exec su - runner -c "cd \"$RUNNER_HOME\" && ./run.sh"
 
   - path: /etc/systemd/system/github-runner.service

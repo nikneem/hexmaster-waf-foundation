@@ -140,10 +140,30 @@ Create these secrets in the platform Key Vault:
 
 #### VMSS bootstrap requirements
 
-Before the runner pool can deploy successfully:
+Before the runner pool can deploy and register successfully:
 
 1. Replace the example `runnerExecutionConfig.adminPublicKey` value in `main.bicepparam` with a real SSH public key for break-glass access.
-2. Configure a GitHub organization or repository `workflow_job` webhook that targets the Function App URL returned in the landing-zone outputs.
+2. Create the `github-actions-pat` and `github-webhook-secret` secrets in the platform Key Vault (see above).
+3. Create a runner group named **HexMaster Landingzone** in the GitHub organization under Settings → Actions → Runner groups.
+4. Configure a GitHub organization or repository `workflow_job` webhook that targets the Function App URL returned in the landing-zone outputs.
+
+#### Troubleshooting runner registration
+
+If the VMSS instance is running but no runner appears in GitHub, check cloud-init logs:
+
+```bash
+az vmss run-command invoke \
+  --resource-group <runner-rg> \
+  --name <vmss-name> \
+  --instance-id 0 \
+  --command-id RunShellScript \
+  --scripts "journalctl -u github-runner.service --no-pager -n 80"
+```
+
+Common causes:
+- **Key Vault secret missing** — the `github-actions-pat` secret must exist before the first VM boots
+- **PAT scope insufficient** — the PAT needs `admin:org` to create registration tokens at the org level
+- **Runner group missing** — the group referenced in `runnerExecutionConfig.runnerGroup` must exist in the GitHub org
 
 The deployment workflow now also packages and zip-deploys the Function App code under `infra\runner-autoscaler\` after the infrastructure deployment succeeds.
 

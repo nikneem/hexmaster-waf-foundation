@@ -36,7 +36,7 @@ param runnerExecutionConfig object = {
     'vmss'
   ]
   runnerGroup: 'HexMaster Landingzone'
-  runnerVersion: '2.321.0'
+  runnerVersion: '2.333.1'
   vmSku: 'Standard_D2as_v5'
   osDiskSizeGb: 64
   adminUsername: 'runneradmin'
@@ -64,19 +64,22 @@ var cloudInit = replace(
       replace(
         replace(
           replace(
-            replace(cloudInitTemplate, '__RUNNER_VERSION__', runnerExecutionConfig.runnerVersion),
-            '__GITHUB_URL__',
-            runnerExecutionConfig.githubUrl),
-          '__RUNNER_GROUP__',
-          runnerExecutionConfig.runnerGroup),
-        '__RUNNER_LABELS__',
-        join(runnerExecutionConfig.runnerLabels, ',')),
-      '__KEY_VAULT_URI__',
-      platformKeyVault.properties.vaultUri),
-    '__GITHUB_PAT_SECRET_NAME__',
-    runnerExecutionConfig.githubPatSecretName),
-  '__REGISTRATION_TOKEN_API_URL__',
-  runnerExecutionConfig.registrationTokenApiUrl)
+            replace(
+              replace(cloudInitTemplate, '__RUNNER_VERSION__', runnerExecutionConfig.runnerVersion),
+              '__GITHUB_URL__',
+              runnerExecutionConfig.githubUrl),
+            '__RUNNER_GROUP__',
+            runnerExecutionConfig.runnerGroup),
+          '__RUNNER_LABELS__',
+          join(runnerExecutionConfig.runnerLabels, ',')),
+        '__KEY_VAULT_URI__',
+        platformKeyVault.properties.vaultUri),
+      '__GITHUB_PAT_SECRET_NAME__',
+      runnerExecutionConfig.githubPatSecretName),
+    '__REGISTRATION_TOKEN_API_URL__',
+    runnerExecutionConfig.registrationTokenApiUrl),
+  '__MANAGED_IDENTITY_CLIENT_ID__',
+  deployRunnerPool ? runnerExecutionIdentity!.properties.clientId : '')
 
 resource platformKeyVault 'Microsoft.KeyVault/vaults@2024-11-01' existing = {
   name: keyVaultName

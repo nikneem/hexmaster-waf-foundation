@@ -78,7 +78,7 @@ param runnerExecutionConfig = {
     'vmss'
   ]
   runnerGroup: 'HexMaster Landingzone'
-  runnerVersion: '2.321.0'
+  runnerVersion: '2.333.1'
   vmSku: 'Standard_D2as_v5'
   osDiskSizeGb: 64
   adminUsername: 'runneradmin'
