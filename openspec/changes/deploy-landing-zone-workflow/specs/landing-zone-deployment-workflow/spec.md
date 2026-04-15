@@ -22,7 +22,7 @@ The landing-zone deployment workflow MUST provide a preview or what-if style ste
 - **THEN** it generates reviewable output describing the intended infrastructure changes
 
 ### Requirement: The workflow SHALL support bootstrap deployment before self-hosted runners exist
-The landing-zone deployment workflow SHALL support an initial deployment path that does not require the platform's own self-hosted ACA Jobs runner capability to already exist.
+The landing-zone deployment workflow SHALL support an initial deployment path that does not require the platform's own self-hosted VMSS runner capability to already exist.
 
 #### Scenario: The landing zone is deployed for the first time
 - **WHEN** the platform has not yet provisioned its own self-hosted runner resources

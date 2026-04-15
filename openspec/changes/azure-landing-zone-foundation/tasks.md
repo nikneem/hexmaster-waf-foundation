@@ -5,7 +5,7 @@
 
 ## 2. Hub network foundation
 
-- [x] 2.1 Define the hub VNet address plan and required subnets for VPN, shared services, private endpoints, and Container Apps infrastructure.
+- [x] 2.1 Define the hub VNet address plan and required subnets for VPN, shared services, private endpoints, and runner infrastructure.
 - [x] 2.2 Define the baseline NSG, route-table, and DNS patterns that preserve future spoke onboarding and later routing upgrades.
 
 ## 3. Operator connectivity
@@ -20,7 +20,7 @@
 
 ## 5. Runner execution platform
 
-- [x] 5.1 Define the Azure Container Apps environment and job execution boundaries for GitHub self-hosted runners.
+- [x] 5.1 Define the VM scale set execution boundary and autoscaling model for GitHub self-hosted runners.
 - [x] 5.2 Define runner identity, image retrieval, secret handling, and private connectivity to hub-hosted services and Azure resources.
 
 ## 6. Workload spoke networking

@@ -8,7 +8,7 @@ The landing zone SHALL provide a hub VNet that serves as the shared platform net
 - **THEN** a hub VNet exists with non-overlapping address space reserved for future spokes and growth
 
 ### Requirement: The hub SHALL use dedicated subnets for platform roles
-The hub SHALL segment platform roles into dedicated subnets for VPN ingress, shared services, private connectivity, and Azure Container Apps infrastructure so that platform components do not share a flat trust boundary.
+The hub SHALL segment platform roles into dedicated subnets for VPN ingress, shared services, private connectivity, and runner infrastructure so that platform components do not share a flat trust boundary.
 
 #### Scenario: Platform components are placed in the hub
 - **WHEN** operator access, shared services, and runner infrastructure are deployed

@@ -2,7 +2,7 @@
 
 The repository now contains a subscription-scope Bicep entrypoint for the landing zone under `infra/landing-zone/main.bicep`, plus module structure for governance, connectivity, shared services, runner execution, and workload spokes. What is missing is the GitHub Actions workflow that can validate and deploy that infrastructure consistently.
 
-The workflow must support a safe bootstrap path before the self-hosted ACA Jobs runner platform exists. It must also align with the repository's security and cost posture: GitHub OIDC over static credentials, least-privilege permissions, immutable action pinning, readable deployment stages, and supportable post-deploy feedback.
+The workflow must support a safe bootstrap path before the self-hosted VMSS runner platform exists. It must also align with the repository's security and cost posture: GitHub OIDC over static credentials, least-privilege permissions, immutable action pinning, readable deployment stages, and supportable post-deploy feedback.
 
 ## Goals / Non-Goals
 
@@ -31,7 +31,7 @@ Alternatives considered:
 
 ### Bootstrap on GitHub-hosted runners first
 
-The workflow should default to GitHub-hosted runners for bootstrap and early platform deployment. The self-hosted ACA Jobs runner platform is part of the landing zone and therefore cannot be assumed to exist before the workflow first provisions it.
+The workflow should default to GitHub-hosted runners for bootstrap and early platform deployment. The self-hosted VMSS runner platform is part of the landing zone and therefore cannot be assumed to exist before the workflow first provisions it.
 
 Alternatives considered:
 - Require self-hosted runners from day one: circular dependency for initial deployment.
@@ -66,7 +66,7 @@ Alternatives considered:
 
 ## Risks / Trade-offs
 
-- **Bootstrap and steady-state runner models differ** -> Keep bootstrap execution on GitHub-hosted runners and treat self-hosted ACA Jobs as a later optimization path.
+- **Bootstrap and steady-state runner models differ** -> Keep bootstrap execution on GitHub-hosted runners and treat self-hosted VMSS runners as a later optimization path.
 - **Least-privilege RBAC may be harder to configure initially** -> Document the required roles and scopes explicitly in the workflow design and setup notes.
 - **What-if and verification steps add runtime** -> Keep them focused on infrastructure safety and operator value rather than excessive pipeline work.
 - **Workflow complexity can grow quickly** -> Prefer a small number of readable stages and centralize repeated deployment inputs.

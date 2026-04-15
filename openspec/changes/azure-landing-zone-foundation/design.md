@@ -1,6 +1,6 @@
 ## Context
 
-The landing zone is intended to host shared platform services first and workload environments later. The current priority is to establish an Azure foundation that is aligned with Azure Well-Architected guidance while remaining extremely cost effective. The design must include a VNet-based foundation, support future workload routing through separate spokes, provide a central Azure Container Registry, host GitHub Actions runners in Azure Container Apps Jobs, and offer a simple operator access path during failures.
+The landing zone is intended to host shared platform services first and workload environments later. The current priority is to establish an Azure foundation that is aligned with Azure Well-Architected guidance while remaining extremely cost effective. The design must include a VNet-based foundation, support future workload routing through separate spokes, provide a central Azure Container Registry, host GitHub Actions runners on an Azure Virtual Machine Scale Set, and offer a simple operator access path during failures.
 
 The design assumes an early-stage platform with limited initial workload count. It therefore favors a minimal hub-and-spoke model over an enterprise-heavy topology with Azure Virtual WAN, centralized firewalls, or always-on jump-host infrastructure.
 
@@ -45,12 +45,12 @@ Alternatives considered:
 - Azure Bastion: easier browser-based access but higher standing cost.
 - CI/CD-only administration: lower exposure, but insufficient for break-glass troubleshooting.
 
-### Host GitHub runners on Azure Container Apps Jobs
+### Host GitHub runners on Azure Virtual Machine Scale Sets
 
-GitHub self-hosted runners are implemented with Azure Container Apps Jobs integrated into the landing-zone network. This supports ephemeral job execution and low idle cost while keeping network access private.
+GitHub self-hosted runners are implemented with an Azure Virtual Machine Scale Set integrated into the landing-zone network. A webhook-driven autoscaler changes VMSS capacity between zero and ten instances so the runner pool can scale down when idle while still supporting Linux runners with Docker.
 
 Alternatives considered:
-- VM or VMSS-based runners: broader compatibility, but higher steady-state cost and more patching overhead.
+- Azure Container Apps Jobs: lower idle overhead, but not the selected implementation for this landing zone.
 - AKS-based runners: flexible, but operationally heavy for the current stage.
 
 ### Use central shared services in the hub
@@ -69,7 +69,7 @@ Alternatives considered:
 
 ## Risks / Trade-offs
 
-- **Container Apps Jobs runner compatibility gaps** -> Restrict the initial runner scope to workflows that do not require VM-only features or privileged Docker semantics.
+- **VMSS runner bootstrap and webhook dependency** -> Keep the autoscaler scoped to labeled runner workloads, document the GitHub webhook requirement, and retain GitHub-hosted runners for bootstrap deployment.
 - **Hub concentration risk** -> Keep workloads out of the hub and isolate runners in dedicated subnets and identities.
 - **Future security upgrades may require network changes** -> Reserve address space and routing boundaries now so stronger controls can be added without redesigning the topology.
 - **P2S VPN is less polished than Bastion for some operators** -> Keep the access path simple, documented, and limited to operational scenarios where direct network reachability is required.

@@ -8,7 +8,7 @@ The project needs a practical Azure Landing Zone foundation that follows Azure W
 - Define a hub network foundation that is ready for future spoke VNets.
 - Define low-cost operator connectivity using Point-to-Site VPN rather than higher-cost always-on management services.
 - Define shared platform services hosted from the hub, including a central Azure Container Registry.
-- Define GitHub self-hosted runner execution using Azure Container Apps Jobs with private access to landing-zone resources.
+- Define GitHub self-hosted runner execution using Azure Virtual Machine Scale Sets with private access to landing-zone resources.
 - Define workload spoke networking and the minimum connectivity model between spokes and the hub.
 
 ## Capabilities
@@ -18,7 +18,7 @@ The project needs a practical Azure Landing Zone foundation that follows Azure W
 - `hub-network-foundation`: Hub VNet, subnetting, address planning, and routing readiness for the landing zone core.
 - `operator-connectivity`: Low-cost break-glass and operational access into the landing zone through VPN connectivity.
 - `shared-platform-services`: Shared hub-hosted services such as the central container registry and related private connectivity.
-- `runner-execution-platform`: GitHub Actions runner execution on Azure Container Apps Jobs with private network integration.
+- `runner-execution-platform`: GitHub Actions runner execution on Azure Virtual Machine Scale Sets with private network integration and webhook-driven scale control.
 - `workload-spoke-networking`: Separate workload VNets peered to the hub with controlled connectivity boundaries.
 
 ### Modified Capabilities
