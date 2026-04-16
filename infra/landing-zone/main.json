@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.39.26.7824",
-      "templateHash": "10293971608424505659"
+      "templateHash": "11864921859098280802"
     }
   },
   "parameters": {
@@ -2491,7 +2491,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.39.26.7824",
-              "templateHash": "16156262949209091711"
+              "templateHash": "5552758149036454053"
             }
           },
           "parameters": {
@@ -2594,7 +2594,7 @@
             {
               "condition": "[variables('runnerVmssGuestTelemetryEnabled')]",
               "type": "Microsoft.Insights/dataCollectionRules",
-              "apiVersion": "2023-03-11",
+              "apiVersion": "2024-03-11",
               "name": "[variables('runnerVmssGuestTelemetryRuleName')]",
               "location": "[parameters('location')]",
               "kind": "Linux",
@@ -2609,7 +2609,6 @@
                         "Microsoft-InsightsMetrics"
                       ],
                       "samplingFrequencyInSeconds": 60,
-                      "scheduledTransferPeriod": "PT1M",
                       "counterSpecifiers": [
                         "\\VmInsights\\DetailedMetrics"
                       ]
